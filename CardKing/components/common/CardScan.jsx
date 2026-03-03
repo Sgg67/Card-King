@@ -1,0 +1,947 @@
+// components/common/CardScan.jsx
+import { extractCardInfo } from '../services/ExtractCardInfo';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useState, useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Dimensions,
+  Modal,
+  SafeAreaView,
+  Alert,
+  ActivityIndicator
+} from 'react-native';
+import { useRouter } from 'expo-router'
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AntDesign from '@expo/vector-icons/AntDesign';
+import { auth, storage, firestore } from '../config/FireBase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import * as FileSystem from 'expo-file-system';
+import { AnalyzeCard } from '../services/AnalyzeCard';
+
+const { width, height } = Dimensions.get('window');
+const SCAN_RECT_WIDTH = width * 0.8;
+const SCAN_RECT_HEIGHT = SCAN_RECT_WIDTH * 1.4;
+
+export default function CardScan() {
+  const router = useRouter();
+  const [showFinishButton, setShowFinishButton] = useState(false);
+  const [facing, setFacing] = useState('back');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isFrontScanned, setIsFrontScanned] = useState(false);
+  const [isBackScanned, setIsBackScanned] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [scanSessionId, setScanSessionId] = useState(null);
+  const cameraRef = useRef(null);
+
+  if (!permission) {
+    return <View style={styles.loadingContainer} />;
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.permissionContainer}>
+        <View style={styles.permissionCard}>
+          <View style={styles.permissionIcon}>
+            <MaterialIcons name="camera-enhance" size={64} color="#1A1A2E" />
+          </View>
+          <Text style={styles.permissionTitle}>Camera Access</Text>
+          <Text style={styles.permissionText}>
+            To scan your cards, we need access to your camera. This allows us to capture card details for grading.
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={requestPermission}
+          >
+            <Text style={styles.permissionButtonText}>Allow Camera Access</Text>
+          </TouchableOpacity>
+          <Text style={styles.permissionHint}>
+            You can change this later in settings
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  const uploadImageToFirebase = async (imageUri, side, sessionId) => {
+    try {
+      const user = auth?.currentUser;
+      if (!user) {
+        Alert.alert('Authentication Required', 'Please sign in to scan cards');
+        return null;
+      }
+
+      // Convert image to blob
+      const blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = function () {
+          resolve(xhr.response);
+        };
+        xhr.onerror = function (e) {
+          reject(new Error('Failed to convert image'));
+        };
+        xhr.onabort = function () {
+          reject(new Error('Aborted'));
+        };
+        xhr.open('GET', imageUri);
+        xhr.responseType = 'blob';
+        xhr.send();
+      });
+
+      // Store blob size BEFORE closing it
+      const blobSize = blob.size;
+
+      const timestamp = Date.now();
+      const fileName = `${sessionId}_${timestamp}.jpg`;
+
+      // Store in separate folders based on side
+      const storagePath = `card_scans/${user.uid}/${side}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
+
+      await uploadBytes(storageRef, blob, {
+        contentType: 'image/jpeg',
+        customMetadata: {
+          userId: user.uid,
+          side: side,
+          sessionId: sessionId,
+          timestamp: timestamp.toString()
+        }
+      });
+
+      // Close blob AFTER upload is complete
+      blob.close();
+
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Save to Firestore
+      const userRef = doc(firestore, 'users', user.uid);
+
+      const scanRecord = {
+        sessionId,
+        side,
+        imageUrl: downloadURL,
+        storagePath: storagePath,
+        uploadedAt: new Date().toISOString(),
+        fileSize: blobSize, // Use the stored size
+        fileName: fileName
+      };
+
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+
+        // Initialize arrays if they don't exist
+        const updates = {
+          updatedAt: new Date().toISOString()
+        };
+
+        // Store in side-specific arrays for easy retrieval
+        if (side === 'front') {
+          updates.frontScans = arrayUnion(scanRecord);
+          // Also keep the general scans array for backward compatibility
+          if (userData.scans && Array.isArray(userData.scans)) {
+            updates.scans = arrayUnion(scanRecord);
+          } else {
+            updates.scans = [scanRecord];
+          }
+        } else {
+          updates.backScans = arrayUnion(scanRecord);
+          if (userData.scans && Array.isArray(userData.scans)) {
+            updates.scans = arrayUnion(scanRecord);
+          } else {
+            updates.scans = [scanRecord];
+          }
+        }
+
+        await updateDoc(userRef, updates);
+      } else {
+        // First time user
+        const scanData = {
+          uid: user.uid,
+          email: user.email,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          scans: [scanRecord]
+        };
+
+        if (side === 'front') {
+          scanData.frontScans = [scanRecord];
+          scanData.backScans = [];
+        } else {
+          scanData.frontScans = [];
+          scanData.backScans = [scanRecord];
+        }
+
+        await setDoc(userRef, scanData);
+      }
+
+      // Update scan session
+      const sessionRef = doc(firestore, 'scan_sessions', sessionId);
+      const sessionData = {
+        userId: user.uid,
+        [`${side}ImageUrl`]: downloadURL,
+        [`${side}StoragePath`]: storagePath,
+        [`${side}UploadedAt`]: new Date().toISOString(),
+        [`${side}FileSize`]: blobSize, // Use the stored size
+        [`${side}FileName`]: fileName,
+        status: side === 'front' ? 'front_completed' : 'back_completed',
+        updatedAt: new Date().toISOString()
+      };
+
+      const sessionDoc = await getDoc(sessionRef);
+
+      if (sessionDoc.exists()) {
+        await updateDoc(sessionRef, sessionData);
+      } else {
+        sessionData.createdAt = new Date().toISOString();
+        await setDoc(sessionRef, sessionData);
+      }
+
+      return downloadURL;
+
+    } catch (error) {
+      console.log('Upload error:', error);
+      return null;
+    }
+  };
+
+  const handleScan = async () => {
+    if (cameraRef.current) {
+      try {
+        setIsUploading(true);
+
+        if (!auth?.currentUser) {
+          setIsUploading(false);
+          Alert.alert(
+            'Authentication Required',
+            'Please sign in to scan cards',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+          skipProcessing: false,
+          exif: true,
+        });
+
+        if (!isFrontScanned) {
+          const sessionId = `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          setScanSessionId(sessionId);
+
+          await uploadImageToFirebase(photo.uri, 'front', sessionId);
+
+          setIsFrontScanned(true);
+          Alert.alert(
+            "Front Scanned!",
+            "Front image uploaded successfully. Now flip the card and scan the back side.",
+            [{ text: 'OK' }]
+          );
+        } else {
+          await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
+
+          setIsBackScanned(true);
+          setShowFinishButton(true);
+          Alert.alert(
+            'Scan Complete!',
+            'Both sides have been scanned and uploaded successfully.',
+            [{ text: 'OK' }]
+          );
+        }
+      } catch (error) {
+        console.log('Camera error:', error);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
+
+  const handleFinishScan = async () => {
+  try {
+    
+    
+    const { lookupCardFromWebMatches } = await import('../services/CardLookupService');
+    const { getLatestScans } = await import('../services/RetrieveScans');
+    const { frontUrl, backUrl } = await getLatestScans();
+
+    if (frontUrl && backUrl) {
+      console.log('🔍 Starting Google Vision analysis...');
+      console.log('Front URL:', frontUrl);
+      console.log('Back URL:', backUrl);
+
+      // Step 1: Get Vision API results
+      const visionResults = await AnalyzeCard(frontUrl, backUrl);
+            // Step 2: Extract basic card information
+      const cardInfo = extractCardInfo(visionResults);
+      
+      console.log('📋 Basic Card Info:', {
+        name: cardInfo.name,
+        year: cardInfo.year,
+        manufacturer: cardInfo.manufacturer,
+        cardNumber: cardInfo.cardNumber,
+        confidence: Math.round(cardInfo.confidence * 100) + '%'
+      });
+
+      // Step 3: Use web matches to get accurate card information
+      console.log('🌐 Looking up card from web matches...');
+      const lookupResults = await lookupCardFromWebMatches(cardInfo, cardInfo.webMatches);
+      
+      // Step 4: Determine the best search query
+      let searchQuery = lookupResults.searchQuery || 
+                       lookupResults.bestGuess || 
+                       buildAccurateSearchQuery(cardInfo);
+      
+      console.log('🔍 Best Search Query:', searchQuery);
+      
+      if (lookupResults.exactMatch) {
+        console.log('✅ Found exact match from marketplace:');
+        console.log('   Match:', lookupResults.exactMatch);
+        
+        // Update cardInfo with more accurate data from match
+        cardInfo.name = lookupResults.exactMatch.name || cardInfo.name;
+        cardInfo.year = lookupResults.exactMatch.year || cardInfo.year;
+        cardInfo.manufacturer = lookupResults.exactMatch.manufacturer || cardInfo.manufacturer;
+        cardInfo.cardNumber = lookupResults.exactMatch.cardNumber || cardInfo.cardNumber;
+        cardInfo.parallel = lookupResults.exactMatch.parallel || cardInfo.parallel;
+      }
+
+      if (lookupResults.possibleMatches.length > 0) {
+        console.log('📊 Possible matches found:', lookupResults.possibleMatches.length);
+        console.log('   First match:', lookupResults.possibleMatches[0]);
+      }
+
+      
+      Alert.alert(
+        'Card Identified',
+        `We found: ${searchQuery}\n\nCard Details:\n` +
+        `📅 Year: ${cardInfo.year || 'Unknown'}\n` +
+        `🏭 Manufacturer: ${cardInfo.manufacturer || 'Unknown'}\n` +
+        `🔢 Card #: ${cardInfo.cardNumber || 'Unknown'}\n` +
+        `✨ Parallel: ${cardInfo.parallel || 'None'}\n` +
+        `⭐ Rookie: ${cardInfo.rookie ? 'Yes' : 'No'}\n` +
+        `✍️ Autograph: ${cardInfo.autograph ? 'Yes' : 'No'}\n` +
+        `🧵 Relic: ${cardInfo.relic ? 'Yes' : 'No'}\n\n` +
+        `Confidence: ${Math.round(cardInfo.confidence * 100)}%`,
+        [
+          { 
+            text: 'Search Google', 
+            onPress: () => {
+              const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+              console.log('Google Search URL:', googleSearchUrl);
+            }
+          },
+          { 
+            text: 'OK', 
+            onPress: () => {
+              console.log('Card identification complete:', {
+                cardInfo,
+                lookupResults,
+                searchQuery
+              });
+            }
+          }
+        ]
+      );
+
+    } else {
+      Alert.alert('Error', 'Could not retrieve scan images');
+    }
+  } catch (error) {
+    console.error('❌ Error during vision analysis:', error);
+    Alert.alert('Error', 'Failed to analyze card images');
+  }
+  // Remove the finally block with setIsUploading(false) since we're not using it
+};
+
+// Helper function to build search query
+const buildAccurateSearchQuery = (cardInfo) => {
+  const parts = [];
+  
+  if (cardInfo.year) parts.push(cardInfo.year);
+  if (cardInfo.manufacturer) parts.push(cardInfo.manufacturer);
+  if (cardInfo.name) parts.push(cardInfo.name);
+  if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
+  if (cardInfo.parallel) parts.push(cardInfo.parallel);
+  if (cardInfo.rookie) parts.push('Rookie');
+  if (cardInfo.autograph) parts.push('Autograph');
+  if (cardInfo.relic) parts.push('Relic');
+  
+  return parts.join(' ');
+};
+
+  const resetScan = () => {
+    setIsFrontScanned(false);
+    setIsBackScanned(false);
+    setScanSessionId(null);
+    setIsUploading(false);
+    setShowFinishButton(false);
+  };
+
+  const toggleCameraFacing = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Instructions Modal */}
+      <Modal
+        visible={showInstructions}
+        transparent={true}
+        animationType='slide'
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowInstructions(false)}
+            >
+              <Ionicons name='close' size={24} color='#666' />
+            </TouchableOpacity>
+
+            <View style={styles.instructionIcon}>
+              <MaterialIcons name="credit-card" size={60} color="#1A1A2E" />
+            </View>
+
+            <Text style={styles.modalTitle}>How to Scan</Text>
+
+            <View style={styles.instructionStep}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>1</Text>
+              </View>
+              <Text style={styles.instructionText}>
+                Place the card inside the rectangle
+              </Text>
+            </View>
+
+            <View style={styles.instructionStep}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>2</Text>
+              </View>
+              <Text style={styles.instructionText}>
+                Ensure good lighting and no glare
+              </Text>
+            </View>
+
+            <View style={styles.instructionStep}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>3</Text>
+              </View>
+              <Text style={styles.instructionText}>
+                Tap the camera button to scan front
+              </Text>
+            </View>
+
+            <View style={styles.instructionStep}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>4</Text>
+              </View>
+              <Text style={styles.instructionText}>
+                Flip the card and scan the back
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.startButton}
+              onPress={() => setShowInstructions(false)}
+            >
+              <Text style={styles.startButtonText}>Start Scanning</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Camera View */}
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing={facing}
+      >
+        <SafeAreaView style={styles.statusBar}>
+          <View style={styles.statusContainer}>
+            <View style={styles.statusItem}>
+              <View style={[
+                styles.statusDot,
+                isFrontScanned && styles.statusDotActive
+              ]} />
+              <Text style={styles.statusText}>Front</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <View style={[
+                styles.statusDot,
+                isBackScanned && styles.statusDotActive
+              ]} />
+              <Text style={styles.statusText}>Back</Text>
+            </View>
+          </View>
+
+          {isUploading && (
+            <View style={styles.uploadIndicator}>
+              <ActivityIndicator size="small" color="#FFD700" />
+              <Text style={styles.uploadText}>
+                {isFrontScanned ? 'Uploading back...' : 'Uploading front...'}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => setShowInstructions(true)}
+          >
+            <Ionicons name="help-circle-outline" size={24} color="white" />
+          </TouchableOpacity>
+        </SafeAreaView>
+
+        <View style={styles.overlay}>
+          <View style={styles.scanRectContainer}>
+            <View style={[styles.corner, styles.cornerTopLeft]} />
+            <View style={[styles.corner, styles.cornerTopRight]} />
+            <View style={styles.scanRect}>
+              <Text style={styles.scanGuideText}>
+                {isFrontScanned ? 'Scan Back Side' : 'Scan Front Side'}
+              </Text>
+              {isUploading && (
+                <View style={styles.scanStatus}>
+                  <ActivityIndicator size="small" color="white" />
+                  <Text style={styles.scanStatusText}>
+                    {isFrontScanned ? 'Uploading back...' : 'Uploading front...'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={[styles.corner, styles.cornerBottomLeft]} />
+            <View style={[styles.corner, styles.cornerBottomRight]} />
+          </View>
+        </View>
+
+        <View style={styles.controlsContainer}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={resetScan}
+            disabled={(!isFrontScanned && !isBackScanned) || isUploading}
+          >
+            <MaterialIcons
+              name="refresh"
+              size={24}
+              color={(isFrontScanned || isBackScanned) && !isUploading ? "white" : "#666"}
+            />
+            <Text style={[
+              styles.secondaryButtonText,
+              ((!isFrontScanned && !isBackScanned) || isUploading) && styles.disabledText
+            ]}>
+              Reset
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.captureButton,
+              (isFrontScanned && isBackScanned) && styles.captureButtonDisabled,
+              isUploading && styles.captureButtonDisabled
+            ]}
+            onPress={handleScan}
+            disabled={isUploading || (isFrontScanned && isBackScanned)}
+          >
+            <View style={styles.captureButtonInner}>
+              {isUploading && (
+                <ActivityIndicator size="small" color="#1A1A2E" />
+              )}
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              isUploading && styles.disabledButton
+            ]}
+            onPress={toggleCameraFacing}
+            disabled={isUploading}
+          >
+            <Ionicons
+              name="camera-reverse"
+              size={24}
+              color={isUploading ? "#666" : "white"}
+            />
+            <Text style={[
+              styles.secondaryButtonText,
+              isUploading && styles.disabledText
+            ]}>
+              Flip
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* FINISH BUTTON - Add this right after controlsContainer but still inside CameraView */}
+        {showFinishButton && (
+          <TouchableOpacity
+            style={styles.finishButton}
+            onPress={() => router.push('/card-value')}
+            disabled={isUploading}
+          >
+            <View style={styles.finishButtonContent}>
+              <AntDesign name="stock" size={24} color="#1A1A2E" />
+              <Text style={styles.finishButtonText}>Value Card</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      </CameraView>
+    </View>
+  );
+}
+
+// Add these new styles to your StyleSheet
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#1A1A2E',
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: '#1A1A2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  permissionCard: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 30,
+    width: '90%',
+    alignItems: 'center',
+    elevation: 8,
+  },
+  permissionIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  permissionTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1A1A2E',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  permissionText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 30,
+  },
+  permissionButton: {
+    backgroundColor: '#1A1A2E',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    width: '100%',
+    alignItems: 'center',
+  },
+  permissionButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  permissionHint: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  camera: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 30,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    zIndex: 1,
+  },
+  instructionIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1A1A2E',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  instructionStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    width: '100%',
+  },
+  stepNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1A1A2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  stepNumberText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  instructionText: {
+    fontSize: 16,
+    color: '#333',
+    flex: 1,
+  },
+  startButton: {
+    backgroundColor: '#1A1A2E',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  startButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  statusBar: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#666',
+    marginRight: 8,
+  },
+  statusDotActive: {
+    backgroundColor: '#4CAF50',
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  helpButton: {
+    position: 'absolute',
+    right: 20,
+    top: 10,
+    padding: 5,
+  },
+  uploadIndicator: {
+    position: 'absolute',
+    right: 60,
+    top: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+  },
+  uploadText: {
+    color: '#FFD700',
+    fontSize: 12,
+    marginLeft: 5,
+    fontWeight: '500',
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanRectContainer: {
+    width: SCAN_RECT_WIDTH,
+    height: SCAN_RECT_HEIGHT,
+    position: 'relative',
+  },
+  scanRect: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanGuideText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  scanStatus: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  scanStatusText: {
+    color: 'white',
+    fontSize: 12,
+    marginLeft: 5,
+    fontWeight: '500',
+  },
+  corner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: '#FFD700',
+  },
+  cornerTopLeft: {
+    top: -2,
+    left: -2,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 8,
+  },
+  cornerTopRight: {
+    top: -2,
+    right: -2,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 8,
+  },
+  cornerBottomLeft: {
+    bottom: -2,
+    left: -2,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 8,
+  },
+  cornerBottomRight: {
+    bottom: -2,
+    right: -2,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 8,
+  },
+  controlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  captureButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+  },
+  captureButtonDisabled: {
+    backgroundColor: '#666',
+  },
+  captureButtonInner: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 4,
+    borderColor: '#1A1A2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  secondaryButtonText: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  disabledText: {
+    color: '#666',
+  },
+  finishButton: {
+    position: 'absolute',
+    bottom: 150,
+    alignSelf: 'center',
+    backgroundColor: '#FFD700',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 30,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  finishButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  finishButtonText: {
+    color: '#1A1A2E',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+});
