@@ -30,6 +30,7 @@ export default {
       favicon: "./assets/favicon.png"
     },
     extra: {
+      ximilarApiKey: process.env.EXPO_XIMILAR_API_KEY,
       googleVisionApiKey: process.env.GOOGLE_VISION_API_KEY,
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,

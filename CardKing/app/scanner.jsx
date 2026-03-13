@@ -86,7 +86,7 @@ export default function ScannerScreen() {
           {/* Grade */}
           <TouchableOpacity
             style={styles.iconContainer}
-            onPress={() => router.push('/grade')}
+            onPress={() => router.push('/gradescan')}
           >
             <View style={styles.navIconWrapper}>
               <AntDesign name="linechart" size={24} color="#666" />

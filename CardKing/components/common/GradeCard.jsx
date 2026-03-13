@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     Linking
 } from 'react-native';
-import { getCardPrice } from "../services/GetCardPrice";
+import { gradeCard } from "../services/GradeCardService";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AnalyzeCard } from "../services/AnalyzeCard";
 import { AddToCollection } from "../services/AddToCollection";
@@ -22,11 +22,11 @@ import { buildAccurateSearchQuery, lookupCardFromWebMatches } from "../services/
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const ValueCard = () => {
+const GradeCard = () => {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
-    const [priceLoading, setPriceLoading] = useState(false);
-    const [cardPrice, setCardPrice] = useState(null);
+    const [gradeLoading, setGradeLoading] = useState(false);
+    const [cardGrade, setCardGrade] = useState(null);
     const [imageLoading, setImageLoading] = useState(true);
     const [imageZoomed, setImageZoomed] = useState(false);
     const [imageRotation, setImageRotation] = useState(0);
@@ -43,7 +43,8 @@ const ValueCard = () => {
         isRelic: false,
         searchQuery: null,
         ebaySearchUrl: null,
-        frontImageUrl: null
+        frontImageUrl: null,
+        backImageUrl: null
     });
 
     useEffect(() => {
@@ -57,10 +58,10 @@ const ValueCard = () => {
     }, [cardData.frontImageUrl]);
 
     useEffect(() => {
-        if (cardData.searchQuery) {
-            fetchCardPrice();
+        if (cardData.frontImageUrl && cardData.backImageUrl) {
+            fetchCardGrade();
         }
-    }, [cardData.searchQuery]);
+    }, [cardData.frontImageUrl, cardData.backImageUrl]);
 
     const processImageOrientation = async (imageUri) => {
         try {
@@ -112,7 +113,8 @@ const ValueCard = () => {
                 isRelic: cardInfo.relic || false,
                 searchQuery: searchQuery,
                 ebaySearchUrl: ebaySearchUrl,
-                frontImageUrl: frontUrl
+                frontImageUrl: frontUrl,
+                backImageUrl: backUrl
             });
 
         } catch (error) {
@@ -123,20 +125,24 @@ const ValueCard = () => {
         }
     };
 
-    const fetchCardPrice = async () => {
-        if (!cardData.searchQuery) return;
+    const fetchCardGrade = async () => {
+        if (!cardData.frontImageUrl || !cardData.backImageUrl) return;
         
-        setPriceLoading(true);
+        setGradeLoading(true);
         try {
-            const searchQuery = `${cardData.year} ${cardData.manufacturer} ${cardData.playerName} ${cardData.cardNumber !== 'N/A' ? '#' + cardData.cardNumber : ''}`.trim();
-            
-            const priceResult = await getCardPrice(searchQuery);
-            setCardPrice(priceResult);
+            const gradeResult = await gradeCard(cardData.frontImageUrl, cardData.backImageUrl);
+            console.log('Grade result:', JSON.stringify(gradeResult, null, 2));
+            setCardGrade(gradeResult);
         } catch (error) {
-            console.error('Error fetching price:', error);
-            setCardPrice(null);
+            console.error('Error fetching card grade:', error);
+            setCardGrade(null);
+            Alert.alert(
+                'Grading Error',
+                'Unable to grade the card at this time. Please try again.',
+                [{ text: 'OK' }]
+            );
         } finally {
-            setPriceLoading(false);
+            setGradeLoading(false);
         }
     };
 
@@ -153,34 +159,87 @@ const ValueCard = () => {
         }
     };
 
-    const formatPriceDisplay = () => {
-        if (priceLoading) {
+    const getGradeDetails = (grade) => {
+        if (grade >= 9.5) return { color: '#1B5E20', text: 'Gem Mint', range: '9.5-10' };
+        if (grade >= 9) return { color: '#2E7D32', text: 'Mint', range: '9' };
+        if (grade >= 8) return { color: '#388E3C', text: 'Near Mint-Mint', range: '8' };
+        if (grade >= 7) return { color: '#F57C00', text: 'Near Mint', range: '7' };
+        if (grade >= 6) return { color: '#F9A825', text: 'Excellent-Mint', range: '6' };
+        if (grade >= 5) return { color: '#FBC02D', text: 'Excellent', range: '5' };
+        if (grade >= 4) return { color: '#E64A19', text: 'Very Good', range: '4' };
+        if (grade >= 3) return { color: '#D32F2F', text: 'Good', range: '3' };
+        if (grade >= 2) return { color: '#C2185B', text: 'Fair', range: '2' };
+        return { color: '#7B1FA2', text: 'Poor', range: '1' };
+    };
+
+    const formatGradeDisplay = () => {
+        if (gradeLoading) {
             return (
-                <View style={styles.priceLoadingContainer}>
-                    <ActivityIndicator size="small" color="#98fb98" />
-                    <Text style={styles.priceLoadingText}>Fetching price...</Text>
+                <View style={styles.gradeLoadingContainer}>
+                    <ActivityIndicator size="small" color="#4CAF50" />
+                    <Text style={styles.gradeLoadingText}>Grading card...</Text>
                 </View>
             );
         }
         
-        if (!cardPrice || !cardPrice.average) {
+        if (!cardGrade || !cardGrade.grade) {
             return (
-                <Text style={styles.infoValueNoPrice}>Price unavailable</Text>
+                <View style={styles.noGradeContainer}>
+                    <Ionicons name="alert-circle-outline" size={24} color="#999" />
+                    <Text style={styles.infoValueNoGrade}>Grade unavailable</Text>
+                </View>
             );
         }
         
+        const finalGrade = cardGrade.grade;
+        const gradeDetails = getGradeDetails(finalGrade);
+        
         return (
-            <View>
-                <Text style={styles.infoValuePrice}>${cardPrice.average}</Text>
-                {cardPrice.sampleSize > 0 && (
-                    <Text style={styles.priceDetails}>
-                        Based on {cardPrice.sampleSize} sales • From: ${cardPrice.min} - ${cardPrice.max}
+            <View style={styles.gradeContainer}>
+                <View style={styles.gradeHeader}>
+                    <View style={[styles.gradeBadge, { backgroundColor: gradeDetails.color }]}>
+                        <Text style={styles.gradeBadgeText}>{gradeDetails.text}</Text>
+                    </View>
+                    <Text style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
+                        {finalGrade.toFixed(1)}
                     </Text>
+                </View>
+                
+                {/* Subgrades */}
+                {cardGrade.subgrades && (
+                    <View style={styles.subgradesGrid}>
+                        {cardGrade.subgrades.centering !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Centering</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.centering}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.corners !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Corners</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.corners}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.edges !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Edges</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.edges}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.surface !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Surface</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.surface}</Text>
+                            </View>
+                        )}
+                    </View>
                 )}
-                {cardPrice.sources && cardPrice.sources.length > 0 && (
-                    <Text style={styles.priceSources}>
-                        Sources: {cardPrice.sources.join(', ')}
-                    </Text>
+                
+                {/* Condition text from API */}
+                {cardGrade.condition && (
+                    <View style={styles.conditionContainer}>
+                        <Text style={styles.conditionText}>Condition: {cardGrade.condition}</Text>
+                    </View>
                 )}
             </View>
         );
@@ -193,7 +252,7 @@ const ValueCard = () => {
             cardData.manufacturer,
             cardData.cardNumber,
             cardData.frontImageUrl,
-            cardPrice?.average
+            cardGrade?.grade || null
         );
         router.push("./collection");
     };
@@ -335,11 +394,11 @@ const ValueCard = () => {
 
                     <View style={styles.infoRow}>
                         <View style={styles.infoIcon}>
-                            <Ionicons name="pricetag" size={20} color="#98fb98" />
+                            <Ionicons name="ribbon" size={20} color="#4CAF50" />
                         </View>
                         <View style={styles.infoContent}>
-                            <Text style={styles.infoLabel}>Card Price</Text>
-                            {formatPriceDisplay()}
+                            <Text style={styles.infoLabel}>Card Grade</Text>
+                            {formatGradeDisplay()}
                         </View>
                     </View>
 
@@ -698,40 +757,92 @@ const styles = StyleSheet.create({
     bottomSpacer: {
         height: 30,
     },
-    // New price styles
-    priceLoadingContainer: {
+    // Enhanced Grade Styles
+    gradeLoadingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         marginTop: 4,
     },
-    priceLoadingText: {
+    gradeLoadingText: {
         marginLeft: 8,
         fontSize: 14,
         color: '#666',
         fontStyle: 'italic',
     },
-    infoValuePrice: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#2E7D32',
-        marginBottom: 4,
+    noGradeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
-    infoValueNoPrice: {
+    infoValueNoGrade: {
         fontSize: 16,
         color: '#999',
         fontStyle: 'italic',
     },
-    priceDetails: {
+    gradeContainer: {
+        marginTop: 4,
+    },
+    gradeHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    gradeBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+    },
+    gradeBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    infoValueGrade: {
+        fontSize: 36,
+        fontWeight: '800',
+    },
+    subgradesGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginTop: 8,
+        gap: 8,
+    },
+    subgradeCard: {
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        padding: 12,
+        width: '48%',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    subgradeLabel: {
         fontSize: 12,
         color: '#666',
-        marginTop: 2,
+        marginBottom: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
-    priceSources: {
-        fontSize: 11,
-        color: '#999',
-        marginTop: 2,
-        fontStyle: 'italic',
+    subgradeValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#333',
+    },
+    conditionContainer: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F0F0',
+        alignItems: 'center',
+    },
+    conditionText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
     },
 });
 
-export default ValueCard;
+export default GradeCard;
