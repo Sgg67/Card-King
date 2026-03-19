@@ -2,19 +2,17 @@ import { getDoc } from 'firebase/firestore';
 import { storage, auth, firestore } from '../config/FireBase';
 import { Alert } from 'react-native';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { EventRegister } from 'react-native-event-listeners';
 
-// This function ensures the user document exists, but you're mixing schema with data
+// This function ensures the user document exists
 const ensureUserDocument = async (user) => {
     try {
         const userDoc = await getDoc(doc(firestore, 'card_collection', user.uid));
 
         if (!userDoc.exists()) {
-            // Create a user document with just the UID initially
-            // Don't put schema definitions (String, Number) as values
             await setDoc(doc(firestore, 'card_collection', user.uid), {
                 uid: user.uid,
                 createdAt: new Date().toISOString(),
-                // cards will be stored in a subcollection instead
             });
         }
     } catch (error) {
@@ -23,8 +21,7 @@ const ensureUserDocument = async (user) => {
     }
 };
 
-
-// Fixed AddToCollection function
+// AddToCollection function for Pokemon cards
 export const AddToCollectionPokemon = async (name, year, manufacturer, card_number, front_scan, price, grade) => {
     
     const user = auth.currentUser;
@@ -39,7 +36,6 @@ export const AddToCollectionPokemon = async (name, year, manufacturer, card_numb
         await ensureUserDocument(user);
         
         // Create a reference to the user's cards subcollection
-        // This is better than overwriting the user document for each card
         const userCardsRef = collection(firestore, 'card_collection', user.uid, 'cards');
         
         // Add a new document to the subcollection with auto-generated ID
@@ -47,15 +43,19 @@ export const AddToCollectionPokemon = async (name, year, manufacturer, card_numb
             character: name,
             year: year,
             manufacturer: manufacturer,
+            // Don't include card_number for Pokemon cards
             image: front_scan,
             addedAt: new Date().toISOString(),
             price: price,
-            grade: grade
+            grade: grade,
+            cardType: 'pokemon' // Add type identifier
         };
         
-        // Use addDoc to create a new card document instead of overwriting the user doc
+        // Use addDoc to create a new card document
         const docRef = await addDoc(userCardsRef, cardData);
         
+        // Emit event to refresh collection view
+        EventRegister.emit('cardAdded');
         
         Alert.alert('Success', 'Card added to collection!');
         return docRef.id; // Return the new document ID
@@ -63,6 +63,6 @@ export const AddToCollectionPokemon = async (name, year, manufacturer, card_numb
     } catch (error) {
         console.error("Error adding card to collection:", error);
         Alert.alert('Error', 'Failed to add card to collection');
-        throw error; // Re-throw if you want to handle it in the calling component
+        throw error;
     }
 };

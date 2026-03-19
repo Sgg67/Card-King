@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+// import use state and use effect from react
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+// import ui components from react native
 import {
   View,
   Text,
@@ -14,11 +16,13 @@ import {
   Dimensions,
 } from 'react-native';
 import { GestureHandlerRootView, TapGestureHandler } from 'react-native-gesture-handler';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import { EventRegister } from 'react-native-event-listeners';
 
 import { getCardsFromDB } from '../services/GetCardsFromDB';
 import { DeleteFromCollection } from '../services/DeleteFromCollection';
 import { MaterialCommunityIcons, AntDesign } from '@expo/vector-icons';
-import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -32,16 +36,39 @@ export default function CollectionView() {
   
   const doubleTapRef = useRef({});
 
+  // Load cards when component mounts and set up event listener
   useEffect(() => {
     loadCards();
+    
+    // Set up event listener for card added events
+    const listener = EventRegister.addEventListener('cardAdded', () => {
+      console.log('📣 Card added event received - reloading...');
+      loadCards();
+    });
+    
+    // Clean up listener on unmount
+    return () => {
+      EventRegister.removeEventListener(listener);
+    };
   }, []);
+
+  // Auto-refresh when screen comes into focus (backup method)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('📱 CollectionView focused - reloading cards...');
+      loadCards();
+    }, [])
+  );
 
   const loadCards = async () => {
     try {
+      console.log('📊 Loading cards from database...');
       const fetchedCards = await getCardsFromDB();
+      console.log(`✅ Loaded ${fetchedCards?.length || 0} cards`);
+      
       setCards(fetchedCards || []);
     } catch (error) {
-      console.error('Error loading cards:', error);
+      console.error('❌ Error loading cards:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -70,7 +97,7 @@ export default function CollectionView() {
       setDeleteModalVisible(false);
       setSelectedCard(null);
     } catch (error) {
-      console.error('Error deleting card:', error);
+      console.error('❌ Error deleting card:', error);
     } finally {
       setIsDeleting(false);
     }
@@ -78,8 +105,9 @@ export default function CollectionView() {
 
   // Format currency
   const formatCurrency = (value) => {
-    if (!value) return '$0.00';
+    if (!value && value !== 0) return '$0.00';
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) return '$0.00';
     return `$${numValue.toFixed(2)}`;
   };
 
@@ -89,11 +117,94 @@ export default function CollectionView() {
     return typeof grade === 'number' ? grade.toFixed(1) : grade;
   };
 
+  // Check if card is Pokemon
+  const isPokemonCard = (item) => {
+    // Check by cardType field first (most reliable)
+    if (item.cardType === 'pokemon') return true;
+    if (item.cardType === 'sports') return false;
+    
+    // Fallback to manufacturer check
+    return item.manufacturer === 'Pokémon' || 
+           item.manufacturer === 'Pokemon' ||
+           item.manufacturer?.toLowerCase() === 'pokémon' ||
+           item.manufacturer?.toLowerCase() === 'pokemon';
+  };
+
+  // Get player display name (handles both sports and Pokemon cards)
+  const getPlayerDisplayName = (item) => {
+    if (!item) return 'Unknown';
+    
+    const isPokemon = isPokemonCard(item);
+    
+    if (isPokemon) {
+      // For Pokemon cards, use the 'character' field
+      if (item.character && item.character !== 'Unknown Pokémon' && item.character !== 'Unknown') {
+        return item.character;
+      }
+      
+      // Fallback to other possible fields
+      if (item.player && item.player !== 'Unknown Player' && item.player !== 'Unknown') {
+        return item.player;
+      }
+      
+      if (item.name) {
+        return item.name;
+      }
+      
+      return 'Pokémon';
+    } else {
+      // For sports cards, check various fields
+      if (item.player && item.player !== 'Unknown Player' && item.player !== 'Unknown') {
+        return item.player;
+      }
+      
+      if (item.playerName) {
+        return item.playerName;
+      }
+      
+      if (item.name) {
+        return item.name;
+      }
+      
+      return 'Unknown Player';
+    }
+  };
+
+  // Get card number (only for sports cards)
+  const getCardNumber = (item) => {
+    // Don't show card number for Pokemon cards
+    if (isPokemonCard(item)) {
+      return null;
+    }
+    
+    // Check all possible field names for card number
+    const possibleFields = [
+      'card_number',
+      'cardNumber',
+      'number',
+      'card_num',
+      'cardNum',
+      'set_number',
+      'setNumber'
+    ];
+    
+    for (const field of possibleFields) {
+      if (item[field] && item[field] !== 'N/A' && item[field] !== 'Unknown') {
+        return item[field];
+      }
+    }
+    
+    return null;
+  };
+
   const renderCard = ({ item }) => {
     const hasPrice = item.cardPrice?.average || item.price;
     const hasGrade = item.grade || item.graded || item.isGraded;
     const priceValue = item.cardPrice?.average || item.price;
     const gradeValue = item.grade || item.graded || item.isGraded;
+    const playerDisplayName = getPlayerDisplayName(item);
+    const cardNumber = getCardNumber(item);
+    const isPokemon = isPokemonCard(item);
 
     if (!doubleTapRef.current[item.id]) {
       doubleTapRef.current[item.id] = React.createRef();
@@ -112,9 +223,9 @@ export default function CollectionView() {
         >
           <View style={styles.card}>
             <View style={styles.imageContainer}>
-              {item.image ? (
+              {item.image || item.front_scan ? (
                 <Image
-                  source={{ uri: item.image }}
+                  source={{ uri: item.image || item.front_scan }}
                   style={styles.cardImage}
                   resizeMode="cover"
                 />
@@ -129,23 +240,33 @@ export default function CollectionView() {
                   <Text style={styles.conditionText}>{item.condition}</Text>
                 </View>
               )}
+              
+              {/* Card type badge */}
+              <View style={[styles.typeBadge, isPokemon ? styles.pokemonTypeBadge : styles.sportsTypeBadge]}>
+                <Text style={styles.typeBadgeText}>
+                  {isPokemon ? 'POKÉMON' : 'SPORTS'}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.cardContent}>
               <View style={styles.headerRow}>
                 <Text style={styles.playerName} numberOfLines={1}>
-                  {item.player || 'Unknown Player'}
+                  {playerDisplayName}
                 </Text>
                 <Text style={styles.yearText}>{item.year || 'N/A'}</Text>
               </View>
 
               <Text style={styles.manufacturer}>
-                {item.manufacturer || 'Unknown Brand'}
+                {item.manufacturer || item.brand || 'Unknown Brand'}
               </Text>
               
-              <Text style={styles.cardNumber}>
-                #{item.card_number || 'N/A'}
-              </Text>
+              {/* Only show card number for sports cards */}
+              {!isPokemon && cardNumber && (
+                <Text style={styles.cardNumber}>
+                  #{cardNumber}
+                </Text>
+              )}
 
               <View style={styles.statsRow}>
                 {hasPrice && (
@@ -196,7 +317,7 @@ export default function CollectionView() {
       <FlatList
         data={cards}
         renderItem={renderCard}
-        keyExtractor={(item) => item.id || item.card_number || Math.random().toString()}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -240,7 +361,7 @@ export default function CollectionView() {
             
             {selectedCard && (
               <Text style={styles.modalMessage}>
-                Are you sure you want to delete <Text style={styles.modalHighlight}>{selectedCard.player || 'this card'}</Text>? This action cannot be undone.
+                Are you sure you want to delete <Text style={styles.modalHighlight}>{getPlayerDisplayName(selectedCard)}</Text>? This action cannot be undone.
               </Text>
             )}
             
@@ -348,6 +469,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  typeBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pokemonTypeBadge: {
+    backgroundColor: '#FFD700',
+  },
+  sportsTypeBadge: {
+    backgroundColor: '#1976d2',
+  },
+  typeBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   cardContent: {
     padding: 16,
