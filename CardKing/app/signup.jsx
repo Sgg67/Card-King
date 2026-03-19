@@ -1,5 +1,7 @@
 // app/signup.jsx (FIXED - No cutting off)
+// import use state from react
 import React, { useState } from 'react';
+// import UI components from react native
 import {
     View,
     Text,
@@ -11,29 +13,37 @@ import {
     TouchableWithoutFeedback,
     Keyboard
 } from 'react-native';
+// import routing from expo
 import { useRouter } from 'expo-router';
+// import signup from config using firebase
 import { signUp } from '../components/config/FireBase';
+// import common components
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 
 export default function SignUpScreen() {
+    // declare const useState variables
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
+    // signup functionality
     const handleSignUp = async () => {
+        // error checking ensuring password must be entered
         if (!email || !password || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
 
+        // if password is not confirmed properly show an error saying password is not confirmed properly
         if (password !== confirmPassword) {
             Alert.alert('Error', 'Passwords do not match');
             return;
         }
 
+        // password is less than 6 characters thrown an error
         if (password.length < 6) {
             Alert.alert('Error', 'Password must be at least 6 characters');
             return;
@@ -41,8 +51,9 @@ export default function SignUpScreen() {
 
         setLoading(true);
         try {
+            // try to create an account
             const result = await signUp(email, password);
-
+            // if result is success acount is properly created
             if (result.success) {
                 Alert.alert('Success', 'Account created successfully!');
                 router.replace('/scanner');
@@ -93,6 +104,7 @@ export default function SignUpScreen() {
 
                         {/* Make sure Input components have proper width */}
                         <View style={styles.inputContainer}>
+                            {/*Enter email input form*/}
                             <Input
                                 label="Email Address"
                                 placeholder="your.email@example.com"
@@ -105,6 +117,7 @@ export default function SignUpScreen() {
                         </View>
 
                         <View style={styles.inputContainer}>
+                            {/*Enter Password input form*/}
                             <Input
                                 label="Password"
                                 placeholder="Create a password"
@@ -117,6 +130,7 @@ export default function SignUpScreen() {
                         </View>
 
                         <View style={styles.inputContainer}>
+                            {/*Confirm password input form*/}
                             <Input
                                 label="Confirm Password"
                                 placeholder="Confirm your password"

@@ -1,6 +1,10 @@
 // components/common/CardScan.jsx
+
+//import camera and permissions regarding camera
 import { CameraView, useCameraPermissions } from 'expo-camera';
+// import state from react
 import { useState, useRef } from 'react';
+// import UI components from react native
 import {
   StyleSheet,
   Text,
@@ -24,7 +28,9 @@ const SCAN_RECT_WIDTH = width * 0.8;
 const SCAN_RECT_HEIGHT = SCAN_RECT_WIDTH * 1.4;
 
 export default function CardScan() {
+  // create a router constant that will be used throughout this file
   const router = useRouter();
+  // create const useState variables that will be used throughout this file
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -203,6 +209,7 @@ export default function CardScan() {
     }
   };
 
+  // handles the uploading of the card scan to firebase
   const handleScan = async () => {
     if (cameraRef.current) {
       try {

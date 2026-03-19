@@ -1,4 +1,6 @@
+// import necessary react imports including useEffect and useState
 import React, { useEffect, useState, useCallback } from 'react';
+// import UI components from react native
 import {
   View,
   StyleSheet,
@@ -11,17 +13,26 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
+// import routing for react native
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// import navigation bar from react native
 import * as NavigationBar from 'expo-navigation-bar';
+// import ant design icons
 import AntDesign from '@expo/vector-icons/AntDesign';
+// import material icons
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+//import profile icon from components
 import ProfileIcon from '../components/common/ProfileIcon';
+// import thegetting cards from DB from services
 import { getCardsFromDB } from '../components/services/GetCardsFromDB';
+// import authentication from config
 import { auth } from '../components/config/FireBase';
+// import signout from firebase
 import { signOut } from 'firebase/auth';
 
 export default function ScannerScreen() {
+  // declare useState constants to be used on this page
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,12 +63,14 @@ export default function ScannerScreen() {
       // Calculate total value
       let avgPrice = 0;
       
+      // set card price to average card price
       if (card.cardPrice && card.cardPrice.average) {
         avgPrice = card.cardPrice.average;
       } else if (card.price) {
         avgPrice = card.price;
       }
 
+      // turn the card price into a float
       const numericPrice = typeof avgPrice === 'string'
         ? parseFloat(avgPrice) || 0
         : avgPrice || 0;

@@ -1,5 +1,7 @@
 // components/common/GradeCard.jsx
+// import useState from react
 import React, { useState, useEffect, useRef } from "react";
+// import UI components from react native
 import {
     View,
     Text,
@@ -13,6 +15,7 @@ import {
     TouchableOpacity,
     Linking
 } from 'react-native';
+// import components from services
 import { gradeCard } from "../services/GradeCardService";
 import { useRouter } from 'expo-router';
 import { AnalyzeCard } from "../services/AnalyzeCard";
@@ -26,7 +29,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 const GradeCard = () => {
+    // create a constant router
     const router = useRouter();
+    // create useState constants
     const [loading, setLoading] = useState(true);
     const [gradeLoading, setGradeLoading] = useState(false);
     const [cardGrade, setCardGrade] = useState(null);
@@ -93,6 +98,7 @@ const GradeCard = () => {
         }
     };
 
+    // detect wether the card is pokemon or sports
     const detectCardType = (visionResults) => {
         const frontText = visionResults.front?.textAnnotations?.[0]?.description || '';
         const backText = visionResults.back?.textAnnotations?.[0]?.description || '';
@@ -283,6 +289,7 @@ const GradeCard = () => {
         }
     };
 
+    // set color cordination for grading
     const getGradeDetails = (grade) => {
         if (grade >= 9.5) return { color: '#1B5E20', text: 'Gem Mint', range: '9.5-10' };
         if (grade >= 9) return { color: '#2E7D32', text: 'Mint', range: '9' };
