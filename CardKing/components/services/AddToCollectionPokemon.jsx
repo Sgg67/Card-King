@@ -25,7 +25,7 @@ const ensureUserDocument = async (user) => {
 
 
 // Fixed AddToCollection function
-export const AddToCollection = async (name, year, manufacturer, card_number, front_scan, price, grade) => {
+export const AddToCollectionPokemon = async (name, year, manufacturer, card_number, front_scan, price, grade) => {
     
     const user = auth.currentUser;
     
@@ -44,10 +44,9 @@ export const AddToCollection = async (name, year, manufacturer, card_number, fro
         
         // Add a new document to the subcollection with auto-generated ID
         const cardData = {
-            player: name,
+            character: name,
             year: year,
             manufacturer: manufacturer,
-            card_number: card_number,
             image: front_scan,
             addedAt: new Date().toISOString(),
             price: price,

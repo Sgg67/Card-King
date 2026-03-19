@@ -1,3 +1,4 @@
+// components/common/ValueCard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import {
     View,
@@ -12,14 +13,16 @@ import {
     TouchableOpacity,
     Linking
 } from 'react-native';
-import { getCardPrice } from "../services/GetCardPrice";
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { getCardPrice, getPokemonCardPrice } from "../services/GetCardPrice";
+import { useRouter } from 'expo-router';
 import { AnalyzeCard } from "../services/AnalyzeCard";
 import { AddToCollection } from "../services/AddToCollection";
+import { AddToCollectionPokemon } from "../services/AddToCollectionPokemon";
 import { extractCardInfo } from "../services/ExtractCardInfo";
+import { extractPokemonCardInfo } from "../services/ExtractPokemonCardInfo";
 import { getLatestScans } from "../services/RetrieveScans";
 import { buildAccurateSearchQuery, lookupCardFromWebMatches } from "../services/CardLookupService";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 const ValueCard = () => {
@@ -31,8 +34,10 @@ const ValueCard = () => {
     const [imageZoomed, setImageZoomed] = useState(false);
     const [imageRotation, setImageRotation] = useState(0);
     const [processedImageUrl, setProcessedImageUrl] = useState(null);
+    const [cardType, setCardType] = useState('sports');
     const scrollViewRef = useRef(null);
     const [cardData, setCardData] = useState({
+        // Sports card fields
         playerName: null,
         year: null,
         manufacturer: null,
@@ -41,6 +46,12 @@ const ValueCard = () => {
         isRookie: false,
         isAutograph: false,
         isRelic: false,
+
+        // Pokémon card fields
+        character: null,
+        set: null,
+
+        // Common fields
         searchQuery: null,
         ebaySearchUrl: null,
         frontImageUrl: null
@@ -60,18 +71,18 @@ const ValueCard = () => {
         if (cardData.searchQuery) {
             fetchCardPrice();
         }
-    }, [cardData.searchQuery]);
+    }, [cardData.searchQuery, cardType]);
 
     const processImageOrientation = async (imageUri) => {
         try {
             setImageLoading(true);
-            
+
             const manipResult = await ImageManipulator.manipulateAsync(
                 imageUri,
                 [{ rotate: 0 }],
                 { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
             );
-            
+
             setProcessedImageUrl(manipResult.uri);
         } catch (error) {
             console.error('Error processing image orientation:', error);
@@ -79,6 +90,58 @@ const ValueCard = () => {
         } finally {
             setImageLoading(false);
         }
+    };
+
+    const detectCardType = (visionResults) => {
+        const frontText = visionResults.front?.textAnnotations?.[0]?.description || '';
+        const backText = visionResults.back?.textAnnotations?.[0]?.description || '';
+        const combinedText = (frontText + ' ' + backText).toUpperCase();
+
+        const pokemonKeywords = [
+            'POKEMON', 'HP', 'WEAKNESS', 'RESISTANCE', 'RETREAT',
+            'ILLUSTRATOR', 'BASIC', 'STAGE 1', 'STAGE 2', 'POKEMON POWER',
+            'BODY', 'POKE-BODY', 'POKE-POWER', 'ABILITY', 'NINTENDO',
+            'CREATURES', 'GAME FREAK', 'ENERGY', 'TRAINER', 'SUPPORTER'
+        ];
+
+        for (const keyword of pokemonKeywords) {
+            if (combinedText.includes(keyword)) {
+                console.log('🎴 Detected Pokémon card by keyword:', keyword);
+                return 'pokemon';
+            }
+        }
+
+        if (visionResults.front?.webDetection?.bestGuessLabels) {
+            const guesses = visionResults.front.webDetection.bestGuessLabels;
+            for (const guess of guesses) {
+                const guessLower = guess.label.toLowerCase();
+                if (guessLower.includes('pokemon') || guessLower.includes('pokémon')) {
+                    return 'pokemon';
+                }
+            }
+        }
+
+        return 'sports';
+    };
+
+    const extractYearManually = (text) => {
+        const copyrightMatch = text.match(/©\s*(\d{4})/i);
+        if (copyrightMatch) return copyrightMatch[1];
+
+        const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+        if (yearMatch) return yearMatch[0];
+
+        return null;
+    };
+
+    const extractCardNumberManually = (text) => {
+        const slashPattern = text.match(/\b(\d{1,4}\s*\/\s*\d{1,4})\b/);
+        if (slashPattern) return slashPattern[1];
+
+        const setPrefixPattern = text.match(/\b(SWSH|SM|XY|BW|DP|SSH|RCL|DAA|VIV|EVO)\d{1,4}\b/i);
+        if (setPrefixPattern) return setPrefixPattern[0];
+
+        return null;
     };
 
     const analyzeCardImages = async () => {
@@ -93,27 +156,87 @@ const ValueCard = () => {
             }
 
             const visionResults = await AnalyzeCard(frontUrl, backUrl);
-            const cardInfo = extractCardInfo(visionResults);
+
+            const detectedType = detectCardType(visionResults);
+            setCardType(detectedType);
+
+            let cardInfo;
+            if (detectedType === 'pokemon') {
+                cardInfo = extractPokemonCardInfo(visionResults);
+                console.log('📋 Using Pokémon card extractor');
+
+                if (!cardInfo.year) {
+                    const manualYear = extractYearManually(cardInfo.fullText);
+                    if (manualYear) {
+                        cardInfo.year = manualYear;
+                        console.log('📅 Manually extracted year:', manualYear);
+                    }
+                }
+
+                if (!cardInfo.cardNumber || cardInfo.cardNumber === 'N/A') {
+                    const manualCardNumber = extractCardNumberManually(cardInfo.fullText);
+                    if (manualCardNumber) {
+                        cardInfo.cardNumber = manualCardNumber;
+                        console.log('🔢 Manually extracted card number:', manualCardNumber);
+                    }
+                }
+
+                console.log('📦 Extracted Set:', cardInfo.set);
+                console.log('🎴 Extracted Name:', cardInfo.name);
+                console.log('🔢 Final Card Number:', cardInfo.cardNumber);
+                console.log('📅 Final Year:', cardInfo.year);
+            } else {
+                cardInfo = extractCardInfo(visionResults);
+                console.log('📋 Using sports card extractor');
+            }
+
             const lookupResults = await lookupCardFromWebMatches(cardInfo, cardInfo.webMatches || []);
-            const searchQuery = lookupResults.searchQuery ||
-                lookupResults.bestGuess ||
-                buildAccurateSearchQuery(cardInfo);
 
-            const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery + ' trading card')}`;
+            let searchQuery;
+            if (detectedType === 'pokemon') {
+                searchQuery = lookupResults.searchQuery ||
+                    `${cardInfo.year || ''} ${cardInfo.set || ''} ${cardInfo.name || ''} Pokemon Card`.trim();
+            } else {
+                searchQuery = lookupResults.searchQuery ||
+                    lookupResults.bestGuess ||
+                    buildAccurateSearchQuery(cardInfo);
+            }
 
-            setCardData({
-                playerName: cardInfo.name || 'Unknown Player',
-                year: cardInfo.year || 'Unknown Year',
-                manufacturer: cardInfo.manufacturer || 'Unknown Manufacturer',
-                cardNumber: cardInfo.cardNumber || 'N/A',
-                parallel: cardInfo.parallel || null,
-                isRookie: cardInfo.rookie || false,
-                isAutograph: cardInfo.autograph || false,
-                isRelic: cardInfo.relic || false,
-                searchQuery: searchQuery,
-                ebaySearchUrl: ebaySearchUrl,
-                frontImageUrl: frontUrl
-            });
+            const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery)}`;
+
+            if (detectedType === 'pokemon') {
+                setCardData({
+                    playerName: cardInfo.name || 'Unknown Pokémon',
+                    manufacturer: 'Pokémon',
+                    character: cardInfo.name || 'Unknown Pokémon',
+                    set: cardInfo.set || 'Unknown Set',
+                    year: cardInfo.year || 'Unknown Year',
+                    cardNumber: cardInfo.cardNumber || 'N/A',
+                    parallel: cardInfo.parallel || null,
+                    isRookie: false,
+                    isAutograph: cardInfo.autograph || false,
+                    isRelic: cardInfo.relic || false,
+                    searchQuery: searchQuery,
+                    ebaySearchUrl: ebaySearchUrl,
+                    frontImageUrl: frontUrl
+                });
+            } else {
+                setCardData({
+                    playerName: cardInfo.name || 'Unknown Player',
+                    manufacturer: cardInfo.manufacturer || 'Unknown Manufacturer',
+                    year: cardInfo.year || 'Unknown Year',
+                    cardNumber: cardInfo.cardNumber || 'N/A',
+                    parallel: cardInfo.parallel || null,
+                    isRookie: cardInfo.rookie || false,
+                    isAutograph: cardInfo.autograph || false,
+                    isRelic: cardInfo.relic || false,
+                    character: null,
+                    set: null,
+                    searchQuery: searchQuery,
+                    ebaySearchUrl: ebaySearchUrl,
+                    frontImageUrl: frontUrl
+                });
+            }
 
         } catch (error) {
             console.error('Error analyzing card:', error);
@@ -125,12 +248,19 @@ const ValueCard = () => {
 
     const fetchCardPrice = async () => {
         if (!cardData.searchQuery) return;
-        
+
         setPriceLoading(true);
         try {
-            const searchQuery = `${cardData.year} ${cardData.manufacturer} ${cardData.playerName} ${cardData.cardNumber !== 'N/A' ? '#' + cardData.cardNumber : ''}`.trim();
-            
-            const priceResult = await getCardPrice(searchQuery);
+            let priceResult;
+
+            if (cardType === 'pokemon') {
+                priceResult = await getPokemonCardPrice(cardData.searchQuery);
+                console.log('💰 Pokémon price result:', priceResult);
+            } else {
+                priceResult = await getCardPrice(cardData.searchQuery);
+                console.log('💰 Sports price result:', priceResult);
+            }
+
             setCardPrice(priceResult);
         } catch (error) {
             console.error('Error fetching price:', error);
@@ -158,25 +288,65 @@ const ValueCard = () => {
             return (
                 <View style={styles.priceLoadingContainer}>
                     <ActivityIndicator size="small" color="#98fb98" />
-                    <Text style={styles.priceLoadingText}>Fetching price...</Text>
+                    <Text style={styles.priceLoadingText}>Fetching market price...</Text>
                 </View>
             );
         }
-        
-        if (!cardPrice || !cardPrice.average) {
+
+        if (!cardPrice || (!cardPrice.average && !cardPrice.median)) {
             return (
-                <Text style={styles.infoValueNoPrice}>Price unavailable</Text>
+                <View style={styles.noPriceContainer}>
+                    <Ionicons name="pricetag-outline" size={20} color="#999" />
+                    <Text style={styles.infoValueNoPrice}>Market price unavailable</Text>
+                </View>
             );
         }
-        
+
+        // Use the pre-calculated display value from the price service
+        const displayPrice = cardPrice.displayValue || cardPrice.median || cardPrice.average;
+        const confidence = cardPrice.confidence || 100;
+
+        // Don't show price if confidence is too low
+        if (confidence < 30) {
+            return (
+                <View style={styles.noPriceContainer}>
+                    <Ionicons name="warning-outline" size={20} color="#F57C00" />
+                    <Text style={styles.infoValueNoPrice}>Insufficient sales data</Text>
+                </View>
+            );
+        }
+
+        // Cap at reasonable limits
+        if (displayPrice > (cardType === 'pokemon' ? 100 : 500)) {
+            return (
+                <View style={styles.noPriceContainer}>
+                    <Ionicons name="warning-outline" size={20} color="#F57C00" />
+                    <Text style={styles.infoValueNoPrice}>Value varies - check eBay</Text>
+                </View>
+            );
+        }
+
         return (
-            <View>
-                <Text style={styles.infoValuePrice}>${cardPrice.average}</Text>
+            <View style={styles.priceContainer}>
+                <View style={styles.priceMainRow}>
+                    <Text style={styles.infoValuePrice}>${displayPrice.toFixed(2)}</Text>
+                    <View style={styles.priceBadge}>
+                        <Text style={styles.priceBadgeText}>Market Avg</Text>
+                    </View>
+                </View>
+
                 {cardPrice.sampleSize > 0 && (
                     <Text style={styles.priceDetails}>
-                        Based on {cardPrice.sampleSize} sales • From: ${cardPrice.min} - ${cardPrice.max}
+                        Based on {cardPrice.sampleSize} recent sales
                     </Text>
                 )}
+
+                {cardPrice.min && cardPrice.max && cardPrice.min !== cardPrice.max && (
+                    <Text style={styles.priceRange}>
+                        Range: ${cardPrice.min.toFixed(2)} - ${cardPrice.max.toFixed(2)}
+                    </Text>
+                )}
+
                 {cardPrice.sources && cardPrice.sources.length > 0 && (
                     <Text style={styles.priceSources}>
                         Sources: {cardPrice.sources.join(', ')}
@@ -187,15 +357,36 @@ const ValueCard = () => {
     };
 
     const addToCollection = () => {
-        AddToCollection(
-            cardData.playerName,
-            cardData.year,
-            cardData.manufacturer,
-            cardData.cardNumber,
-            cardData.frontImageUrl,
-            cardPrice?.average
-        );
+        if (cardType === 'pokemon') {
+            AddToCollectionPokemon(
+                cardData.character,
+                cardData.year,
+                'Pokémon',
+                cardData.cardNumber,
+                cardData.frontImageUrl,
+                cardPrice?.displayValue || cardPrice?.median || cardPrice?.average || null,
+                null
+            );
+        } else {
+            AddToCollection(
+                cardData.playerName,
+                cardData.year,
+                cardData.manufacturer,
+                cardData.cardNumber,
+                cardData.frontImageUrl,
+                cardPrice?.displayValue || cardPrice?.average || cardPrice?.median || null,
+                null
+            );
+        }
         router.push("./collection");
+    };
+
+    const openMarketplace = () => {
+        Linking.openURL(cardData.ebaySearchUrl);
+    };
+
+    const goHome = () => {
+        router.push('/scanner');
     };
 
     if (loading) {
@@ -220,7 +411,14 @@ const ValueCard = () => {
                 scrollEnabled={!imageZoomed}
             >
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Card Details</Text>
+                    <Text style={styles.headerTitle}>
+                        {cardType === 'pokemon' ? 'Pokémon Card Details' : 'Card Details'}
+                    </Text>
+                    {cardType === 'pokemon' && (
+                        <View style={styles.typeBadge}>
+                            <Text style={styles.typeBadgeText}>Pokémon</Text>
+                        </View>
+                    )}
                 </View>
 
                 <View style={[styles.imageContainer, imageZoomed && styles.imageContainerZoomed]}>
@@ -282,8 +480,7 @@ const ValueCard = () => {
 
                     <View style={styles.imageFooter}>
                         <Text style={styles.imageHint}>
-                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} •
-                            Rotate button to adjust orientation
+                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} • Rotate to adjust
                         </Text>
                     </View>
                 </View>
@@ -291,37 +488,75 @@ const ValueCard = () => {
                 <View style={styles.cardContainer}>
                     <Text style={styles.sectionTitle}>Card Information</Text>
 
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoIcon}>
-                            <Ionicons name="person" size={20} color="#007AFF" />
-                        </View>
-                        <View style={styles.infoContent}>
-                            <Text style={styles.infoLabel}>Player</Text>
-                            <Text style={styles.infoValue}>{cardData.playerName}</Text>
-                        </View>
-                    </View>
+                    {cardType === 'pokemon' ? (
+                        <>
+                            <View style={styles.infoRow}>
+                                <View style={styles.infoIcon}>
+                                    <Ionicons name="person" size={20} color="#007AFF" />
+                                </View>
+                                <View style={styles.infoContent}>
+                                    <Text style={styles.infoLabel}>Pokémon</Text>
+                                    <Text style={styles.infoValue}>{cardData.character}</Text>
+                                </View>
+                            </View>
 
-                    <View style={styles.doubleRow}>
-                        <View style={[styles.infoRow, styles.halfWidth]}>
-                            <View style={styles.infoIcon}>
-                                <Ionicons name="calendar" size={20} color="#FF9500" />
-                            </View>
-                            <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>Year</Text>
-                                <Text style={styles.infoValue}>{cardData.year}</Text>
-                            </View>
-                        </View>
+                            <View style={styles.doubleRow}>
+                                <View style={[styles.infoRow, styles.halfWidth]}>
+                                    <View style={styles.infoIcon}>
+                                        <Ionicons name="calendar" size={20} color="#FF9500" />
+                                    </View>
+                                    <View style={styles.infoContent}>
+                                        <Text style={styles.infoLabel}>Year</Text>
+                                        <Text style={styles.infoValue}>{cardData.year}</Text>
+                                    </View>
+                                </View>
 
-                        <View style={[styles.infoRow, styles.halfWidth]}>
-                            <View style={styles.infoIcon}>
-                                <Ionicons name="business" size={20} color="#5856D6" />
+                                <View style={[styles.infoRow, styles.halfWidth]}>
+                                    <View style={styles.infoIcon}>
+                                        <Ionicons name="cube" size={20} color="#5856D6" />
+                                    </View>
+                                    <View style={styles.infoContent}>
+                                        <Text style={styles.infoLabel}>Set</Text>
+                                        <Text style={styles.infoValue}>{cardData.set}</Text>
+                                    </View>
+                                </View>
                             </View>
-                            <View style={styles.infoContent}>
-                                <Text style={styles.infoLabel}>Manufacturer</Text>
-                                <Text style={styles.infoValue}>{cardData.manufacturer}</Text>
+                        </>
+                    ) : (
+                        <>
+                            <View style={styles.infoRow}>
+                                <View style={styles.infoIcon}>
+                                    <Ionicons name="person" size={20} color="#007AFF" />
+                                </View>
+                                <View style={styles.infoContent}>
+                                    <Text style={styles.infoLabel}>Player</Text>
+                                    <Text style={styles.infoValue}>{cardData.playerName}</Text>
+                                </View>
                             </View>
-                        </View>
-                    </View>
+
+                            <View style={styles.doubleRow}>
+                                <View style={[styles.infoRow, styles.halfWidth]}>
+                                    <View style={styles.infoIcon}>
+                                        <Ionicons name="calendar" size={20} color="#FF9500" />
+                                    </View>
+                                    <View style={styles.infoContent}>
+                                        <Text style={styles.infoLabel}>Year</Text>
+                                        <Text style={styles.infoValue}>{cardData.year}</Text>
+                                    </View>
+                                </View>
+
+                                <View style={[styles.infoRow, styles.halfWidth]}>
+                                    <View style={styles.infoIcon}>
+                                        <Ionicons name="business" size={20} color="#5856D6" />
+                                    </View>
+                                    <View style={styles.infoContent}>
+                                        <Text style={styles.infoLabel}>Manufacturer</Text>
+                                        <Text style={styles.infoValue}>{cardData.manufacturer}</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </>
+                    )}
 
                     <View style={styles.infoRow}>
                         <View style={styles.infoIcon}>
@@ -335,10 +570,10 @@ const ValueCard = () => {
 
                     <View style={styles.infoRow}>
                         <View style={styles.infoIcon}>
-                            <Ionicons name="pricetag" size={20} color="#98fb98" />
+                            <Ionicons name="cash" size={20} color="#98fb98" />
                         </View>
                         <View style={styles.infoContent}>
-                            <Text style={styles.infoLabel}>Card Price</Text>
+                            <Text style={styles.infoLabel}>Market Value</Text>
                             {formatPriceDisplay()}
                         </View>
                     </View>
@@ -355,7 +590,7 @@ const ValueCard = () => {
                         </View>
                     )}
 
-                    {(cardData.isRookie || cardData.isAutograph || cardData.isRelic) && (
+                    {cardType === 'sports' && (cardData.isRookie || cardData.isAutograph || cardData.isRelic) && (
                         <View style={styles.featuresSection}>
                             <Text style={styles.featuresTitle}>Features</Text>
                             <View style={styles.featuresContainer}>
@@ -384,14 +619,12 @@ const ValueCard = () => {
 
                 <View style={styles.actionsContainer}>
                     <TouchableOpacity
-                        style={styles.ebayButton}
-                        onPress={() => {
-                            Linking.openURL(cardData.ebaySearchUrl);
-                        }}
+                        style={styles.marketplaceButton}
+                        onPress={openMarketplace}
                     >
                         <View style={styles.buttonContent}>
                             <Ionicons name="logo-ebay" size={24} color="#0063D1" />
-                            <Text style={styles.ebayButtonText}>View on eBay</Text>
+                            <Text style={styles.marketplaceButtonText}>View on eBay</Text>
                         </View>
                     </TouchableOpacity>
 
@@ -402,6 +635,16 @@ const ValueCard = () => {
                         <View style={styles.buttonContent}>
                             <Ionicons name="add-circle" size={24} color="#6B4F8C" />
                             <Text style={styles.collectionButtonText}>Add to Collection</Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.homeButton}
+                        onPress={goHome}
+                    >
+                        <View style={styles.buttonContent}>
+                            <MaterialCommunityIcons name="crown" size={24} color="#FFD700" />
+                            <Text style={styles.homeButtonText}>Home</Text>
                         </View>
                     </TouchableOpacity>
                 </View>
@@ -455,12 +698,27 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
         borderBottomColor: '#F0F0F0',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     headerTitle: {
         fontSize: 28,
         fontWeight: '700',
         color: '#1A1A1A',
-        textAlign: 'center',
+        flex: 1,
+    },
+    typeBadge: {
+        backgroundColor: '#FFD700',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginLeft: 12,
+    },
+    typeBadgeText: {
+        color: '#1A1A2E',
+        fontSize: 14,
+        fontWeight: '700',
     },
     imageContainer: {
         backgroundColor: '#FFFFFF',
@@ -651,13 +909,14 @@ const styles = StyleSheet.create({
         marginHorizontal: 24,
         marginTop: 20,
         gap: 12,
+        marginBottom: 30,
     },
     buttonContent: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    ebayButton: {
+    marketplaceButton: {
         backgroundColor: '#FFFFFF',
         borderRadius: 12,
         borderWidth: 2,
@@ -670,7 +929,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
-    ebayButtonText: {
+    marketplaceButtonText: {
         color: '#0063D1',
         fontSize: 18,
         fontWeight: '700',
@@ -695,10 +954,77 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginLeft: 10,
     },
+    homeButton: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#FFD700',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    homeButtonText: {
+        color: '#FFD700',
+        fontSize: 18,
+        fontWeight: '700',
+        marginLeft: 10,
+    },
     bottomSpacer: {
         height: 30,
     },
-    // New price styles
+    // Enhanced price styles
+    priceContainer: {
+        marginTop: 4,
+    },
+    priceMainRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
+    infoValuePrice: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#2E7D32',
+    },
+    priceBadge: {
+        backgroundColor: '#E8F5E9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    priceBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#2E7D32',
+        textTransform: 'uppercase',
+    },
+    priceDetails: {
+        fontSize: 13,
+        color: '#666',
+        marginTop: 2,
+    },
+    priceRange: {
+        fontSize: 13,
+        color: '#666',
+        marginTop: 2,
+    },
+    priceNote: {
+        fontSize: 12,
+        color: '#F57C00',
+        marginTop: 2,
+        fontStyle: 'italic',
+    },
+    priceSources: {
+        fontSize: 11,
+        color: '#999',
+        marginTop: 2,
+        fontStyle: 'italic',
+    },
     priceLoadingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -710,26 +1036,15 @@ const styles = StyleSheet.create({
         color: '#666',
         fontStyle: 'italic',
     },
-    infoValuePrice: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: '#2E7D32',
-        marginBottom: 4,
+    noPriceContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 4,
     },
     infoValueNoPrice: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#999',
-        fontStyle: 'italic',
-    },
-    priceDetails: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 2,
-    },
-    priceSources: {
-        fontSize: 11,
-        color: '#999',
-        marginTop: 2,
         fontStyle: 'italic',
     },
 });

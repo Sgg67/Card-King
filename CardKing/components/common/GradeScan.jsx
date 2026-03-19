@@ -1,5 +1,4 @@
-// components/common/CardScan.jsx
-import { extractCardInfo } from '../services/ExtractCardInfo';
+// components/common/GradeScan.jsx
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState, useRef } from 'react';
 import {
@@ -19,8 +18,6 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import { auth, storage, firestore } from '../config/FireBase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
-import * as FileSystem from 'expo-file-system';
-import { AnalyzeCard } from '../services/AnalyzeCard';
 
 const { width, height } = Dimensions.get('window');
 const SCAN_RECT_WIDTH = width * 0.8;
@@ -126,7 +123,7 @@ export default function GradeScan() {
         imageUrl: downloadURL,
         storagePath: storagePath,
         uploadedAt: new Date().toISOString(),
-        fileSize: blobSize, // Use the stored size
+        fileSize: blobSize,
         fileName: fileName
       };
 
@@ -135,15 +132,12 @@ export default function GradeScan() {
       if (userDoc.exists()) {
         const userData = userDoc.data();
 
-        // Initialize arrays if they don't exist
         const updates = {
           updatedAt: new Date().toISOString()
         };
 
-        // Store in side-specific arrays for easy retrieval
         if (side === 'front') {
           updates.frontScans = arrayUnion(scanRecord);
-          // Also keep the general scans array for backward compatibility
           if (userData.scans && Array.isArray(userData.scans)) {
             updates.scans = arrayUnion(scanRecord);
           } else {
@@ -160,7 +154,6 @@ export default function GradeScan() {
 
         await updateDoc(userRef, updates);
       } else {
-        // First time user
         const scanData = {
           uid: user.uid,
           email: user.email,
@@ -187,7 +180,7 @@ export default function GradeScan() {
         [`${side}ImageUrl`]: downloadURL,
         [`${side}StoragePath`]: storagePath,
         [`${side}UploadedAt`]: new Date().toISOString(),
-        [`${side}FileSize`]: blobSize, // Use the stored size
+        [`${side}FileSize`]: blobSize,
         [`${side}FileName`]: fileName,
         status: side === 'front' ? 'front_completed' : 'back_completed',
         updatedAt: new Date().toISOString()
@@ -262,118 +255,10 @@ export default function GradeScan() {
     }
   };
 
-  const handleFinishScan = async () => {
-  try {
-    
-    
-    const { lookupCardFromWebMatches } = await import('../services/CardLookupService');
-    const { getLatestScans } = await import('../services/RetrieveScans');
-    const { frontUrl, backUrl } = await getLatestScans();
-
-    if (frontUrl && backUrl) {
-      console.log('🔍 Starting Google Vision analysis...');
-      console.log('Front URL:', frontUrl);
-      console.log('Back URL:', backUrl);
-
-      // Step 1: Get Vision API results
-      const visionResults = await AnalyzeCard(frontUrl, backUrl);
-            // Step 2: Extract basic card information
-      const cardInfo = extractCardInfo(visionResults);
-      
-      console.log('📋 Basic Card Info:', {
-        name: cardInfo.name,
-        year: cardInfo.year,
-        manufacturer: cardInfo.manufacturer,
-        cardNumber: cardInfo.cardNumber,
-        confidence: Math.round(cardInfo.confidence * 100) + '%'
-      });
-
-      // Step 3: Use web matches to get accurate card information
-      console.log('🌐 Looking up card from web matches...');
-      const lookupResults = await lookupCardFromWebMatches(cardInfo, cardInfo.webMatches);
-      
-      // Step 4: Determine the best search query
-      let searchQuery = lookupResults.searchQuery || 
-                       lookupResults.bestGuess || 
-                       buildAccurateSearchQuery(cardInfo);
-      
-      console.log('🔍 Best Search Query:', searchQuery);
-      
-      if (lookupResults.exactMatch) {
-        console.log('✅ Found exact match from marketplace:');
-        console.log('   Match:', lookupResults.exactMatch);
-        
-        // Update cardInfo with more accurate data from match
-        cardInfo.name = lookupResults.exactMatch.name || cardInfo.name;
-        cardInfo.year = lookupResults.exactMatch.year || cardInfo.year;
-        cardInfo.manufacturer = lookupResults.exactMatch.manufacturer || cardInfo.manufacturer;
-        cardInfo.cardNumber = lookupResults.exactMatch.cardNumber || cardInfo.cardNumber;
-        cardInfo.parallel = lookupResults.exactMatch.parallel || cardInfo.parallel;
-      }
-
-      if (lookupResults.possibleMatches.length > 0) {
-        console.log('📊 Possible matches found:', lookupResults.possibleMatches.length);
-        console.log('   First match:', lookupResults.possibleMatches[0]);
-      }
-
-      
-      Alert.alert(
-        'Card Identified',
-        `We found: ${searchQuery}\n\nCard Details:\n` +
-        `📅 Year: ${cardInfo.year || 'Unknown'}\n` +
-        `🏭 Manufacturer: ${cardInfo.manufacturer || 'Unknown'}\n` +
-        `🔢 Card #: ${cardInfo.cardNumber || 'Unknown'}\n` +
-        `✨ Parallel: ${cardInfo.parallel || 'None'}\n` +
-        `⭐ Rookie: ${cardInfo.rookie ? 'Yes' : 'No'}\n` +
-        `✍️ Autograph: ${cardInfo.autograph ? 'Yes' : 'No'}\n` +
-        `🧵 Relic: ${cardInfo.relic ? 'Yes' : 'No'}\n\n` +
-        `Confidence: ${Math.round(cardInfo.confidence * 100)}%`,
-        [
-          { 
-            text: 'Search Google', 
-            onPress: () => {
-              const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-              console.log('Google Search URL:', googleSearchUrl);
-            }
-          },
-          { 
-            text: 'OK', 
-            onPress: () => {
-              console.log('Card identification complete:', {
-                cardInfo,
-                lookupResults,
-                searchQuery
-              });
-            }
-          }
-        ]
-      );
-
-    } else {
-      Alert.alert('Error', 'Could not retrieve scan images');
-    }
-  } catch (error) {
-    console.error('❌ Error during vision analysis:', error);
-    Alert.alert('Error', 'Failed to analyze card images');
-  }
-  // Remove the finally block with setIsUploading(false) since we're not using it
-};
-
-// Helper function to build search query
-const buildAccurateSearchQuery = (cardInfo) => {
-  const parts = [];
-  
-  if (cardInfo.year) parts.push(cardInfo.year);
-  if (cardInfo.manufacturer) parts.push(cardInfo.manufacturer);
-  if (cardInfo.name) parts.push(cardInfo.name);
-  if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
-  if (cardInfo.parallel) parts.push(cardInfo.parallel);
-  if (cardInfo.rookie) parts.push('Rookie');
-  if (cardInfo.autograph) parts.push('Autograph');
-  if (cardInfo.relic) parts.push('Relic');
-  
-  return parts.join(' ');
-};
+  const handleFinishScan = () => {
+    // Simply navigate to the grade page - it will handle all the analysis
+    router.push('/grade');
+  };
 
   const resetScan = () => {
     setIsFrontScanned(false);
@@ -405,7 +290,20 @@ const buildAccurateSearchQuery = (cardInfo) => {
             </TouchableOpacity>
 
             <View style={styles.instructionIcon}>
-              <MaterialIcons name="credit-card" size={60} color="#1A1A2E" />
+              <View style={styles.tradingCard}>
+                <View style={[styles.cardCorner, styles.tl]} />
+                <View style={[styles.cardCorner, styles.tr]} />
+                <View style={styles.cardContent}>
+                  <View style={styles.cardStripe} />
+                  <View style={styles.cardCircle} />
+                  <View style={styles.cardLines}>
+                    <View style={styles.cardLine} />
+                    <View style={[styles.cardLine, styles.cardLineShort]} />
+                  </View>
+                </View>
+                <View style={[styles.cardCorner, styles.bl]} />
+                <View style={[styles.cardCorner, styles.br]} />
+              </View>
             </View>
 
             <Text style={styles.modalTitle}>How to Scan</Text>
@@ -576,16 +474,18 @@ const buildAccurateSearchQuery = (cardInfo) => {
           </TouchableOpacity>
         </View>
 
-        {/* FINISH BUTTON - Add this right after controlsContainer but still inside CameraView */}
+        {/* FINISH BUTTON */}
         {showFinishButton && (
           <TouchableOpacity
             style={styles.finishButton}
-            onPress={() => router.push('/grade')}
+            onPress={handleFinishScan}
             disabled={isUploading}
           >
             <View style={styles.finishButtonContent}>
               <AntDesign name="stock" size={24} color="#1A1A2E" />
-              <Text style={styles.finishButtonText}>Grade Card</Text>
+              <Text style={styles.finishButtonText}>
+                {isUploading ? 'Loading...' : 'Grade Card'}
+              </Text>
             </View>
           </TouchableOpacity>
         )}
@@ -594,7 +494,6 @@ const buildAccurateSearchQuery = (cardInfo) => {
   );
 }
 
-// Add these new styles to your StyleSheet
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
@@ -943,5 +842,85 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 10,
+  },
+  // Trading Card Styles
+  tradingCard: {
+    width: 80,
+    height: 110,
+    backgroundColor: '#1A1A2E',
+    borderRadius: 8,
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#FFD700',
+  },
+  cardCorner: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderColor: '#FFD700',
+  },
+  tl: {
+    top: -2,
+    left: -2,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 8,
+  },
+  tr: {
+    top: -2,
+    right: -2,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 8,
+  },
+  bl: {
+    bottom: -2,
+    left: -2,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 8,
+  },
+  br: {
+    bottom: -2,
+    right: -2,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 8,
+  },
+  cardContent: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'space-between',
+  },
+  cardStripe: {
+    height: 15,
+    backgroundColor: 'rgba(255,215,0,0.3)',
+    borderRadius: 3,
+    marginBottom: 8,
+  },
+  cardCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,215,0,0.5)',
+    alignSelf: 'center',
+    marginVertical: 8,
+  },
+  cardLines: {
+    gap: 4,
+  },
+  cardLine: {
+    height: 6,
+    backgroundColor: 'rgba(255,215,0,0.3)',
+    borderRadius: 3,
+    width: '100%',
+  },
+  cardLineShort: {
+    width: '60%',
   },
 });

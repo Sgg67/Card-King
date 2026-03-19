@@ -29,7 +29,11 @@ export default {
     web: {
       favicon: "./assets/favicon.png"
     },
+    scheme: "cardking",
     extra: {
+      eas: {
+        projectId: "d108afc6-1acb-4b8a-8204-f7155cfec596"
+      },
       ximilarApiKey: process.env.EXPO_XIMILAR_API_KEY,
       googleVisionApiKey: process.env.GOOGLE_VISION_API_KEY,
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
