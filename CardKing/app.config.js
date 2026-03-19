@@ -21,13 +21,13 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
+        foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
       package: "com.yourname.cardking"
     },
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/images/favicon.png"
     },
     scheme: "cardking",
     extra: {
