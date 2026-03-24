@@ -1,6 +1,9 @@
 // components/common/GradeScan.jsx
+// import camera and permissions from expo
 import { CameraView, useCameraPermissions } from 'expo-camera';
+// import useState from react
 import { useState, useRef } from 'react';
+// import UI components from React
 import {
   StyleSheet,
   Text,
@@ -15,6 +18,7 @@ import {
 import { useRouter } from 'expo-router'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
+// import auth, storage, and firestore form FireBase config file
 import { auth, storage, firestore } from '../config/FireBase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
@@ -25,6 +29,7 @@ const SCAN_RECT_HEIGHT = SCAN_RECT_WIDTH * 1.4;
 
 export default function GradeScan() {
   const router = useRouter();
+  // intialize const useState variables
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -227,7 +232,7 @@ export default function GradeScan() {
         if (!isFrontScanned) {
           const sessionId = `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           setScanSessionId(sessionId);
-
+          // send the front of the card image to firebase
           await uploadImageToFirebase(photo.uri, 'front', sessionId);
 
           setIsFrontScanned(true);
@@ -237,6 +242,7 @@ export default function GradeScan() {
             [{ text: 'OK' }]
           );
         } else {
+          // send the back of the card image to firebase
           await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
 
           setIsBackScanned(true);

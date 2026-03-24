@@ -46,7 +46,7 @@ const LoginForm = ({ onLogin, onSignUp }) => {
     setResetEmail(email || ''); // Pre-fill with current email if available
     setShowResetModal(true);
   };
-
+  // reset password logic
   const handleSendResetEmail = async () => {
     if (!resetEmail) {
       Alert.alert('Error', 'Please enter your email address');

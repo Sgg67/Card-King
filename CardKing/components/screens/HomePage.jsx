@@ -1,5 +1,6 @@
 // components/screens/HomePage.jsx (FIXED - No screen movement)
 import React from "react";
+// import UI components from react native
 import {
     View,
     Text,

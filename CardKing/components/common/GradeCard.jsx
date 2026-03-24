@@ -150,7 +150,7 @@ const GradeCard = () => {
         
         return null;
     };
-
+    // get the images from the card
     const analyzeCardImages = async () => {
         try {
             setLoading(true);
@@ -167,6 +167,7 @@ const GradeCard = () => {
             const detectedType = detectCardType(visionResults);
             setCardType(detectedType);
             
+            // if the card is pokemon analyze the Pokemon card using the extractPokemonCardInfo function
             let cardInfo;
             if (detectedType === 'pokemon') {
                 cardInfo = extractPokemonCardInfo(visionResults);
@@ -210,7 +211,7 @@ const GradeCard = () => {
             }
 
             const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery + ' trading card')}`;
-
+            // set the card data with neccesary fields for pokemon data
             if (detectedType === 'pokemon') {
                 setCardData({
                     playerName: cardInfo.name || 'Unknown Pokémon',
@@ -229,6 +230,7 @@ const GradeCard = () => {
                     backImageUrl: backUrl
                 });
             } else {
+                // otherwise set the data as a sports card
                 setCardData({
                     playerName: cardInfo.name || 'Unknown Player',
                     manufacturer: cardInfo.manufacturer || 'Unknown Manufacturer',
@@ -255,6 +257,7 @@ const GradeCard = () => {
         }
     };
 
+    // this function calls the Ximilar API and gets back the grade
     const fetchCardGrade = async () => {
         if (!cardData.frontImageUrl || !cardData.backImageUrl) return;
         

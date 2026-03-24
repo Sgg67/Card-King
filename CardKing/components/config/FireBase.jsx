@@ -156,6 +156,7 @@ export const sendPasswordResetEmail = async (email) => {
   }
   
   try {
+    // try to send password reset email
     await firebaseSendResetEmail(auth, email);
     return { 
       success: true,

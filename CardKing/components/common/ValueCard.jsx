@@ -1,5 +1,6 @@
 // components/common/ValueCard.jsx
 import React, { useState, useEffect, useRef } from "react";
+// import UI components
 import {
     View,
     Text,
@@ -14,6 +15,7 @@ import {
     Linking
 } from 'react-native';
 import { getCardPrice, getPokemonCardPrice } from "../services/GetCardPrice";
+// import necessary services
 import { useRouter } from 'expo-router';
 import { AnalyzeCard } from "../services/AnalyzeCard";
 import { AddToCollection } from "../services/AddToCollection";
