@@ -3,7 +3,7 @@
 //import camera and permissions regarding camera
 import { CameraView, useCameraPermissions } from 'expo-camera';
 // import state from react
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 // import UI components from react native
 import {
   StyleSheet,
@@ -14,7 +14,8 @@ import {
   Modal,
   SafeAreaView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated
 } from 'react-native';
 import { useRouter } from 'expo-router'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -22,10 +23,98 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import { auth, storage, firestore } from '../config/FireBase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const SCAN_RECT_WIDTH = width * 0.8;
 const SCAN_RECT_HEIGHT = SCAN_RECT_WIDTH * 1.4;
+
+// Custom Alert Component
+const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          damping: 10,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Auto close after 1 second
+      const timer = setTimeout(() => {
+        onClose();
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    } else {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const getIcon = () => {
+    switch (type) {
+      case 'success':
+        return <AntDesign name="checkcircle" size={40} color="#4CAF50" />;
+      case 'error':
+        return <AntDesign name="closecircle" size={40} color="#FF3B30" />;
+      case 'info':
+        return <Ionicons name="information-circle" size={40} color="#2196F3" />;
+      default:
+        return <AntDesign name="checkcircle" size={40} color="#4CAF50" />;
+    }
+  };
+
+  const getBackgroundColor = () => {
+    switch (type) {
+      case 'success':
+        return '#E8F5E9';
+      case 'error':
+        return '#FFEBEE';
+      case 'info':
+        return '#E3F2FD';
+      default:
+        return '#E8F5E9';
+    }
+  };
+
+  return (
+    <Modal transparent visible={visible} animationType="none">
+      <View style={styles.customAlertOverlay}>
+        <Animated.View 
+          style={[
+            styles.customAlertContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+              backgroundColor: getBackgroundColor(),
+            }
+          ]}
+        >
+          <View style={styles.customAlertIcon}>
+            {getIcon()}
+          </View>
+          <Text style={styles.customAlertTitle}>{title}</Text>
+          <Text style={styles.customAlertMessage}>{message}</Text>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
 
 export default function CardScan() {
   // create a router constant that will be used throughout this file
@@ -36,45 +125,56 @@ export default function CardScan() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isFrontScanned, setIsFrontScanned] = useState(false);
   const [isBackScanned, setIsBackScanned] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [scanSessionId, setScanSessionId] = useState(null);
+  const [customAlert, setCustomAlert] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
   const cameraRef = useRef(null);
 
-  if (!permission) {
-    return <View style={styles.loadingContainer} />;
-  }
+  // Check if user has seen instructions before
+  useEffect(() => {
+    checkFirstTimeUser();
+  }, []);
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.permissionContainer}>
-        <View style={styles.permissionCard}>
-          <View style={styles.permissionIcon}>
-            <MaterialIcons name="camera-enhance" size={64} color="#1A1A2E" />
-          </View>
-          <Text style={styles.permissionTitle}>Camera Access</Text>
-          <Text style={styles.permissionText}>
-            To scan your cards, we need access to your camera. This allows us to capture card details for grading.
-          </Text>
-          <TouchableOpacity
-            style={styles.permissionButton}
-            onPress={requestPermission}
-          >
-            <Text style={styles.permissionButtonText}>Allow Camera Access</Text>
-          </TouchableOpacity>
-          <Text style={styles.permissionHint}>
-            You can change this later in settings
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  const checkFirstTimeUser = async () => {
+    try {
+      const hasSeenInstructions = await AsyncStorage.getItem('hasSeenInstructions');
+      if (!hasSeenInstructions) {
+        setShowInstructions(true);
+      }
+    } catch (error) {
+      console.log('Error checking first time user:', error);
+    }
+  };
+
+  const handleInstructionsComplete = async () => {
+    setShowInstructions(false);
+    try {
+      await AsyncStorage.setItem('hasSeenInstructions', 'true');
+    } catch (error) {
+      console.log('Error saving instructions preference:', error);
+    }
+  };
+
+  const showCustomAlert = (title, message, type = 'success') => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      type
+    });
+  };
 
   const uploadImageToFirebase = async (imageUri, side, sessionId) => {
     try {
       const user = auth?.currentUser;
       if (!user) {
-        Alert.alert('Authentication Required', 'Please sign in to scan cards');
+        showCustomAlert('Authentication Required', 'Please sign in to scan cards', 'error');
         return null;
       }
 
@@ -205,6 +305,7 @@ export default function CardScan() {
 
     } catch (error) {
       console.log('Upload error:', error);
+      showCustomAlert('Upload Error', 'Failed to upload image. Please try again.', 'error');
       return null;
     }
   };
@@ -217,11 +318,7 @@ export default function CardScan() {
 
         if (!auth?.currentUser) {
           setIsUploading(false);
-          Alert.alert(
-            'Authentication Required',
-            'Please sign in to scan cards',
-            [{ text: 'OK' }]
-          );
+          showCustomAlert('Authentication Required', 'Please sign in to scan cards', 'error');
           return;
         }
 
@@ -238,24 +335,17 @@ export default function CardScan() {
           await uploadImageToFirebase(photo.uri, 'front', sessionId);
 
           setIsFrontScanned(true);
-          Alert.alert(
-            "Front Scanned!",
-            "Front image uploaded successfully. Now flip the card and scan the back side.",
-            [{ text: 'OK' }]
-          );
+          showCustomAlert('Front Scanned!', 'Front image uploaded successfully. Now flip the card and scan the back side.', 'success');
         } else {
           await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
 
           setIsBackScanned(true);
           setShowFinishButton(true);
-          Alert.alert(
-            'Scan Complete!',
-            'Both sides have been scanned and uploaded successfully.',
-            [{ text: 'OK' }]
-          );
+          showCustomAlert('Scan Complete!', 'Both sides have been scanned and uploaded successfully.', 'success');
         }
       } catch (error) {
         console.log('Camera error:', error);
+        showCustomAlert('Camera Error', 'Failed to capture image. Please try again.', 'error');
       } finally {
         setIsUploading(false);
       }
@@ -265,13 +355,11 @@ export default function CardScan() {
   const handleFinishScan = async () => {
     try {
       setIsUploading(true);
-
       // Navigate to ValueCard page - it will handle all the analysis
       router.push('/card-value');
-
     } catch (error) {
       console.error('❌ Error during navigation:', error);
-      Alert.alert('Error', 'Failed to load card details');
+      showCustomAlert('Error', 'Failed to load card details', 'error');
     } finally {
       setIsUploading(false);
     }
@@ -291,6 +379,15 @@ export default function CardScan() {
 
   return (
     <View style={styles.container}>
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={customAlert.visible}
+        title={customAlert.title}
+        message={customAlert.message}
+        type={customAlert.type}
+        onClose={() => setCustomAlert({ ...customAlert, visible: false })}
+      />
+
       {/* Instructions Modal */}
       <Modal
         visible={showInstructions}
@@ -301,7 +398,7 @@ export default function CardScan() {
           <View style={styles.modalContent}>
             <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => setShowInstructions(false)}
+              onPress={handleInstructionsComplete}
             >
               <Ionicons name='close' size={24} color='#666' />
             </TouchableOpacity>
@@ -363,7 +460,7 @@ export default function CardScan() {
 
             <TouchableOpacity
               style={styles.startButton}
-              onPress={() => setShowInstructions(false)}
+              onPress={handleInstructionsComplete}
             >
               <Text style={styles.startButtonText}>Start Scanning</Text>
             </TouchableOpacity>
@@ -420,14 +517,7 @@ export default function CardScan() {
               <Text style={styles.scanGuideText}>
                 {isFrontScanned ? 'Scan Back Side' : 'Scan Front Side'}
               </Text>
-              {isUploading && (
-                <View style={styles.scanStatus}>
-                  <ActivityIndicator size="small" color="white" />
-                  <Text style={styles.scanStatusText}>
-                    {isFrontScanned ? 'Uploading back...' : 'Uploading front...'}
-                  </Text>
-                </View>
-              )}
+              {/* Removed the middle-of-screen upload indicator */}
             </View>
             <View style={[styles.corner, styles.cornerBottomLeft]} />
             <View style={[styles.corner, styles.cornerBottomRight]} />
@@ -501,7 +591,7 @@ export default function CardScan() {
             <View style={styles.finishButtonContent}>
               <AntDesign name="stock" size={24} color="#1A1A2E" />
               <Text style={styles.finishButtonText}>
-                {isUploading ? 'Loading...' : 'Analyze Card'}
+                {isUploading ? 'Loading...' : 'Value Card'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -740,21 +830,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-  scanStatus: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  scanStatusText: {
-    color: 'white',
-    fontSize: 12,
-    marginLeft: 5,
-    fontWeight: '500',
-  },
   corner: {
     position: 'absolute',
     width: 24,
@@ -859,6 +934,46 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 10,
+  },
+  // Custom Alert Styles
+  customAlertOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 999,
+  },
+  customAlertContainer: {
+    width: width * 0.85,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  customAlertIcon: {
+    marginBottom: 16,
+  },
+  customAlertTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1A1A2E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  customAlertMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   // Trading Card Styles
   tradingCard: {

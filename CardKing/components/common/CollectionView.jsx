@@ -227,7 +227,7 @@ export default function CollectionView() {
                 <Image
                   source={{ uri: item.image || item.front_scan }}
                   style={styles.cardImage}
-                  resizeMode="cover"
+                  resizeMode="contain"  // Changed from "cover" to "contain" to show full card
                 />
               ) : (
                 <View style={styles.placeholderImage}>
@@ -441,8 +441,10 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    height: 200,
+    height: 280,  // Increased height to better accommodate the full card
     backgroundColor: '#f0f0f0',
+    justifyContent: 'center',  // Center the image vertically
+    alignItems: 'center',      // Center the image horizontally
   },
   cardImage: {
     width: '100%',
@@ -463,6 +465,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
+    zIndex: 1,
   },
   conditionText: {
     color: '#fff',
@@ -477,6 +480,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    zIndex: 1,
   },
   pokemonTypeBadge: {
     backgroundColor: '#FFD700',
