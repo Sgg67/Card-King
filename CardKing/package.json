@@ -24,6 +24,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/stack": "^7.6.16",
+    "@testing-library/react-native": "^13.3.3",
     "axios": "^1.13.5",
     "dotenv": "^17.2.3",
     "expo": "~54.0.32",
@@ -54,7 +55,8 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "react-test-renderer": "19.1.0"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
@@ -64,5 +66,8 @@
     "react-test-renderer": "^19.1.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "jest" : {
+    "preset": "jest-expo"
+  }
 }
