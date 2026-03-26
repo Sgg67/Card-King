@@ -1,12 +1,11 @@
-// components/common/AuthHeader.jsx (FIXED)
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
 const AuthHeader = ({ title, subtitle }) => {
     return (
-        <View style={styles.logoContainer}>  {/* Fixed: styles instead of StyleSheet */}
-            <Text style={styles.logoText}>{title}</Text>  {/* Fixed */}
-            <Text style={styles.tagline}>{subtitle}</Text>  {/* Fixed */}
+        <View style={styles.logoContainer}> 
+            <Text style={styles.logoText}>{title}</Text>  
+            <Text style={styles.tagline}>{subtitle}</Text>  
         </View>
     );
 };

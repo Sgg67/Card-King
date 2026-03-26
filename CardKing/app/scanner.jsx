@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+// import necessary react imports including useEffect and useState
+import React, { useEffect, useState, useCallback } from 'react';
+// import UI components from react native
 import {
   View,
   StyleSheet,
@@ -7,18 +9,126 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+// import routing for react native
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// import navigation bar from react native
 import * as NavigationBar from 'expo-navigation-bar';
+// import ant design icons
 import AntDesign from '@expo/vector-icons/AntDesign';
+// import material icons
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+//import profile icon from components
 import ProfileIcon from '../components/common/ProfileIcon';
+// import thegetting cards from DB from services
+import { getCardsFromDB } from '../components/services/GetCardsFromDB';
+// import authentication from config
+import { auth } from '../components/config/FireBase';
+// import signout from firebase
+import { signOut } from 'firebase/auth';
 
 export default function ScannerScreen() {
+  // declare useState constants to be used on this page
+  const [cards, setCards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [totalValue, setTotalValue] = useState(0);
+  const [gradedCount, setGradedCount] = useState(0);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+
   const router = useRouter();
 
-  // ✅ ANDROID NAVIGATION BAR COLOR FIX
+  // Calculate total collection value and graded count from cards
+  const calculateCollectionStats = (cardsList) => {
+    if (!cardsList || cardsList.length === 0) {
+      setTotalValue(0);
+      setGradedCount(0);
+      return;
+    }
+
+    console.log('Calculating stats for', cardsList.length, 'cards');
+
+    let graded = 0;
+    
+    const total = cardsList.reduce((sum, card) => {
+      // Calculate graded count - check if card has a grade value
+      if (card.grade || card.graded || card.isGraded) {
+        graded++;
+      }
+
+      // Calculate total value
+      let avgPrice = 0;
+      
+      // set card price to average card price
+      if (card.cardPrice && card.cardPrice.average) {
+        avgPrice = card.cardPrice.average;
+      } else if (card.price) {
+        avgPrice = card.price;
+      }
+
+      // turn the card price into a float
+      const numericPrice = typeof avgPrice === 'string'
+        ? parseFloat(avgPrice) || 0
+        : avgPrice || 0;
+
+      return sum + numericPrice;
+    }, 0);
+
+    setTotalValue(total);
+    setGradedCount(graded);
+  };
+
+  // Load cards function
+  const loadCards = async () => {
+    try {
+      console.log('Loading cards...');
+      const fetchedCards = await getCardsFromDB();
+      console.log('Fetched cards count:', fetchedCards?.length);
+      setCards(fetchedCards || []);
+      calculateCollectionStats(fetchedCards || []);
+    } catch (error) {
+      console.error('Error loading cards:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    setLogoutModalVisible(false);
+    try {
+      await signOut(auth);
+      router.push('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to sign out. Please try again.');
+    }
+  };
+
+  // Format currency
+  const formatCurrency = (value) => {
+    return `$${value.toFixed(2)}`;
+  };
+
+  // Initial load
+  useEffect(() => {
+    loadCards();
+  }, []);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Screen focused, reloading cards...');
+      loadCards();
+    }, [])
+  );
+
+  // Android navigation bar color fix
   useEffect(() => {
     if (Platform.OS === 'android') {
       NavigationBar.setBackgroundColorAsync('#F8F9FA');
@@ -57,7 +167,7 @@ export default function ScannerScreen() {
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <MaterialCommunityIcons name="cards" size={24} color="#666" />
-              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statNumber}>{cards.length}</Text>
               <Text style={styles.statLabel}>Cards</Text>
             </View>
 
@@ -65,7 +175,7 @@ export default function ScannerScreen() {
 
             <View style={styles.statItem}>
               <AntDesign name="staro" size={24} color="#666" />
-              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statNumber}>{gradedCount}</Text>
               <Text style={styles.statLabel}>Graded</Text>
             </View>
 
@@ -73,8 +183,8 @@ export default function ScannerScreen() {
 
             <View style={styles.statItem}>
               <MaterialCommunityIcons name="trending-up" size={24} color="#666" />
-              <Text style={styles.statNumber}>$0</Text>
-              <Text style={styles.statLabel}>Value</Text>
+              <Text style={styles.statNumber}>{formatCurrency(totalValue)}</Text>
+              <Text style={styles.statLabel}>Total Value</Text>
             </View>
           </View>
         </View>
@@ -86,7 +196,7 @@ export default function ScannerScreen() {
           {/* Grade */}
           <TouchableOpacity
             style={styles.iconContainer}
-            onPress={() => router.push('/grade')}
+            onPress={() => router.push('/gradescan')}
           >
             <View style={styles.navIconWrapper}>
               <AntDesign name="linechart" size={24} color="#666" />
@@ -142,6 +252,55 @@ export default function ScannerScreen() {
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Floating Logout Button */}
+      <TouchableOpacity 
+        style={styles.logoutButton} 
+        onPress={() => setLogoutModalVisible(true)}
+      >
+        <MaterialCommunityIcons name="logout" size={24} color="#FF3B30" />
+      </TouchableOpacity>
+
+      {/* Custom Logout Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={logoutModalVisible}
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setLogoutModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconContainer}>
+                  <MaterialCommunityIcons name="logout" size={50} color="#FF3B30" />
+                </View>
+                
+                <Text style={styles.modalTitle}>Sign Out</Text>
+                <Text style={styles.modalMessage}>
+                  Are you sure you want to sign out? 
+                </Text>
+
+                <View style={styles.modalButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setLogoutModalVisible(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.signOutButton]}
+                    onPress={handleLogout}
+                  >
+                    <Text style={styles.signOutButtonText}>Sign Out</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -309,6 +468,107 @@ const styles = StyleSheet.create({
 
   homeText: {
     color: '#1A1A2E',
+    fontWeight: '600',
+  },
+
+  // Floating logout button
+  logoutButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 40,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    maxWidth: 340,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFE5E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1A1A2E',
+    marginBottom: 8,
+  },
+
+  modalMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginHorizontal: 6,
+  },
+
+  cancelButton: {
+    backgroundColor: '#F0F0F0',
+  },
+
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  signOutButton: {
+    backgroundColor: '#FF3B30',
+  },
+
+  signOutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

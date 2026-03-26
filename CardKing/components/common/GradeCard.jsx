@@ -1,6 +1,7 @@
-// components/common/ValueCard.jsx
+// components/common/GradeCard.jsx
+// import useState from react
 import React, { useState, useEffect, useRef } from "react";
-// import UI components
+// import UI components from react native
 import {
     View,
     Text,
@@ -14,8 +15,8 @@ import {
     TouchableOpacity,
     Linking
 } from 'react-native';
-import { getCardPrice, getPokemonCardPrice } from "../services/GetCardPrice";
-// import necessary services
+// import components from services
+import { gradeCard } from "../services/GradeCardService";
 import { useRouter } from 'expo-router';
 import { AnalyzeCard } from "../services/AnalyzeCard";
 import { AddToCollection } from "../services/AddToCollection";
@@ -27,11 +28,13 @@ import { buildAccurateSearchQuery, lookupCardFromWebMatches } from "../services/
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const ValueCard = () => {
+const GradeCard = () => {
+    // create a constant router
     const router = useRouter();
+    // create useState constants
     const [loading, setLoading] = useState(true);
-    const [priceLoading, setPriceLoading] = useState(false);
-    const [cardPrice, setCardPrice] = useState(null);
+    const [gradeLoading, setGradeLoading] = useState(false);
+    const [cardGrade, setCardGrade] = useState(null);
     const [imageLoading, setImageLoading] = useState(true);
     const [imageZoomed, setImageZoomed] = useState(false);
     const [imageRotation, setImageRotation] = useState(0);
@@ -48,15 +51,16 @@ const ValueCard = () => {
         isRookie: false,
         isAutograph: false,
         isRelic: false,
-
+        
         // Pokémon card fields
         character: null,
         set: null,
-
+        
         // Common fields
         searchQuery: null,
         ebaySearchUrl: null,
-        frontImageUrl: null
+        frontImageUrl: null,
+        backImageUrl: null
     });
 
     useEffect(() => {
@@ -70,21 +74,21 @@ const ValueCard = () => {
     }, [cardData.frontImageUrl]);
 
     useEffect(() => {
-        if (cardData.searchQuery) {
-            fetchCardPrice();
+        if (cardData.frontImageUrl && cardData.backImageUrl) {
+            fetchCardGrade();
         }
-    }, [cardData.searchQuery, cardType]);
+    }, [cardData.frontImageUrl, cardData.backImageUrl]);
 
     const processImageOrientation = async (imageUri) => {
         try {
             setImageLoading(true);
-
+            
             const manipResult = await ImageManipulator.manipulateAsync(
                 imageUri,
                 [{ rotate: 0 }],
                 { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
             );
-
+            
             setProcessedImageUrl(manipResult.uri);
         } catch (error) {
             console.error('Error processing image orientation:', error);
@@ -94,25 +98,26 @@ const ValueCard = () => {
         }
     };
 
+    // detect wether the card is pokemon or sports
     const detectCardType = (visionResults) => {
         const frontText = visionResults.front?.textAnnotations?.[0]?.description || '';
         const backText = visionResults.back?.textAnnotations?.[0]?.description || '';
         const combinedText = (frontText + ' ' + backText).toUpperCase();
-
+        
         const pokemonKeywords = [
             'POKEMON', 'HP', 'WEAKNESS', 'RESISTANCE', 'RETREAT',
             'ILLUSTRATOR', 'BASIC', 'STAGE 1', 'STAGE 2', 'POKEMON POWER',
             'BODY', 'POKE-BODY', 'POKE-POWER', 'ABILITY', 'NINTENDO',
             'CREATURES', 'GAME FREAK', 'ENERGY', 'TRAINER', 'SUPPORTER'
         ];
-
+        
         for (const keyword of pokemonKeywords) {
             if (combinedText.includes(keyword)) {
                 console.log('🎴 Detected Pokémon card by keyword:', keyword);
                 return 'pokemon';
             }
         }
-
+        
         if (visionResults.front?.webDetection?.bestGuessLabels) {
             const guesses = visionResults.front.webDetection.bestGuessLabels;
             for (const guess of guesses) {
@@ -122,30 +127,30 @@ const ValueCard = () => {
                 }
             }
         }
-
+        
         return 'sports';
     };
 
     const extractYearManually = (text) => {
         const copyrightMatch = text.match(/©\s*(\d{4})/i);
         if (copyrightMatch) return copyrightMatch[1];
-
+        
         const yearMatch = text.match(/\b(19|20)\d{2}\b/);
         if (yearMatch) return yearMatch[0];
-
+        
         return null;
     };
 
     const extractCardNumberManually = (text) => {
         const slashPattern = text.match(/\b(\d{1,4}\s*\/\s*\d{1,4})\b/);
         if (slashPattern) return slashPattern[1];
-
+        
         const setPrefixPattern = text.match(/\b(SWSH|SM|XY|BW|DP|SSH|RCL|DAA|VIV|EVO)\d{1,4}\b/i);
         if (setPrefixPattern) return setPrefixPattern[0];
-
+        
         return null;
     };
-
+    // get the images from the card
     const analyzeCardImages = async () => {
         try {
             setLoading(true);
@@ -158,15 +163,16 @@ const ValueCard = () => {
             }
 
             const visionResults = await AnalyzeCard(frontUrl, backUrl);
-
+            
             const detectedType = detectCardType(visionResults);
             setCardType(detectedType);
-
+            
+            // if the card is pokemon analyze the Pokemon card using the extractPokemonCardInfo function
             let cardInfo;
             if (detectedType === 'pokemon') {
                 cardInfo = extractPokemonCardInfo(visionResults);
                 console.log('📋 Using Pokémon card extractor');
-
+                
                 if (!cardInfo.year) {
                     const manualYear = extractYearManually(cardInfo.fullText);
                     if (manualYear) {
@@ -174,7 +180,7 @@ const ValueCard = () => {
                         console.log('📅 Manually extracted year:', manualYear);
                     }
                 }
-
+                
                 if (!cardInfo.cardNumber || cardInfo.cardNumber === 'N/A') {
                     const manualCardNumber = extractCardNumberManually(cardInfo.fullText);
                     if (manualCardNumber) {
@@ -182,7 +188,7 @@ const ValueCard = () => {
                         console.log('🔢 Manually extracted card number:', manualCardNumber);
                     }
                 }
-
+                
                 console.log('📦 Extracted Set:', cardInfo.set);
                 console.log('🎴 Extracted Name:', cardInfo.name);
                 console.log('🔢 Final Card Number:', cardInfo.cardNumber);
@@ -191,9 +197,9 @@ const ValueCard = () => {
                 cardInfo = extractCardInfo(visionResults);
                 console.log('📋 Using sports card extractor');
             }
-
+            
             const lookupResults = await lookupCardFromWebMatches(cardInfo, cardInfo.webMatches || []);
-
+            
             let searchQuery;
             if (detectedType === 'pokemon') {
                 searchQuery = lookupResults.searchQuery ||
@@ -204,8 +210,8 @@ const ValueCard = () => {
                     buildAccurateSearchQuery(cardInfo);
             }
 
-            const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery)}`;
-
+            const ebaySearchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchQuery + ' trading card')}`;
+            // set the card data with neccesary fields for pokemon data
             if (detectedType === 'pokemon') {
                 setCardData({
                     playerName: cardInfo.name || 'Unknown Pokémon',
@@ -220,9 +226,11 @@ const ValueCard = () => {
                     isRelic: cardInfo.relic || false,
                     searchQuery: searchQuery,
                     ebaySearchUrl: ebaySearchUrl,
-                    frontImageUrl: frontUrl
+                    frontImageUrl: frontUrl,
+                    backImageUrl: backUrl
                 });
             } else {
+                // otherwise set the data as a sports card
                 setCardData({
                     playerName: cardInfo.name || 'Unknown Player',
                     manufacturer: cardInfo.manufacturer || 'Unknown Manufacturer',
@@ -236,7 +244,8 @@ const ValueCard = () => {
                     set: null,
                     searchQuery: searchQuery,
                     ebaySearchUrl: ebaySearchUrl,
-                    frontImageUrl: frontUrl
+                    frontImageUrl: frontUrl,
+                    backImageUrl: backUrl
                 });
             }
 
@@ -248,27 +257,25 @@ const ValueCard = () => {
         }
     };
 
-    const fetchCardPrice = async () => {
-        if (!cardData.searchQuery) return;
-
-        setPriceLoading(true);
+    // this function calls the Ximilar API and gets back the grade
+    const fetchCardGrade = async () => {
+        if (!cardData.frontImageUrl || !cardData.backImageUrl) return;
+        
+        setGradeLoading(true);
         try {
-            let priceResult;
-
-            if (cardType === 'pokemon') {
-                priceResult = await getPokemonCardPrice(cardData.searchQuery);
-                console.log('💰 Pokémon price result:', priceResult);
-            } else {
-                priceResult = await getCardPrice(cardData.searchQuery);
-                console.log('💰 Sports price result:', priceResult);
-            }
-
-            setCardPrice(priceResult);
+            const gradeResult = await gradeCard(cardData.frontImageUrl, cardData.backImageUrl);
+            console.log('Grade result:', JSON.stringify(gradeResult, null, 2));
+            setCardGrade(gradeResult);
         } catch (error) {
-            console.error('Error fetching price:', error);
-            setCardPrice(null);
+            console.error('Error fetching card grade:', error);
+            setCardGrade(null);
+            Alert.alert(
+                'Grading Error',
+                'Unable to grade the card at this time. Please try again.',
+                [{ text: 'OK' }]
+            );
         } finally {
-            setPriceLoading(false);
+            setGradeLoading(false);
         }
     };
 
@@ -285,74 +292,86 @@ const ValueCard = () => {
         }
     };
 
-    const formatPriceDisplay = () => {
-        if (priceLoading) {
+    // set color cordination for grading
+    const getGradeDetails = (grade) => {
+        if (grade >= 9.5) return { color: '#1B5E20', text: 'Gem Mint', range: '9.5-10' };
+        if (grade >= 9) return { color: '#2E7D32', text: 'Mint', range: '9' };
+        if (grade >= 8) return { color: '#388E3C', text: 'Near Mint-Mint', range: '8' };
+        if (grade >= 7) return { color: '#F57C00', text: 'Near Mint', range: '7' };
+        if (grade >= 6) return { color: '#F9A825', text: 'Excellent-Mint', range: '6' };
+        if (grade >= 5) return { color: '#FBC02D', text: 'Excellent', range: '5' };
+        if (grade >= 4) return { color: '#E64A19', text: 'Very Good', range: '4' };
+        if (grade >= 3) return { color: '#D32F2F', text: 'Good', range: '3' };
+        if (grade >= 2) return { color: '#C2185B', text: 'Fair', range: '2' };
+        return { color: '#7B1FA2', text: 'Poor', range: '1' };
+    };
+
+    const formatGradeDisplay = () => {
+        if (gradeLoading) {
             return (
-                <View style={styles.priceLoadingContainer}>
-                    <ActivityIndicator size="small" color="#98fb98" />
-                    <Text style={styles.priceLoadingText}>Fetching market price...</Text>
+                <View style={styles.gradeLoadingContainer}>
+                    <ActivityIndicator size="small" color="#4CAF50" />
+                    <Text style={styles.gradeLoadingText}>Grading card...</Text>
                 </View>
             );
         }
-
-        if (!cardPrice || (!cardPrice.average && !cardPrice.median)) {
+        
+        if (!cardGrade || !cardGrade.grade) {
             return (
-                <View style={styles.noPriceContainer}>
-                    <Ionicons name="pricetag-outline" size={20} color="#999" />
-                    <Text style={styles.infoValueNoPrice}>Market price unavailable</Text>
+                <View style={styles.noGradeContainer}>
+                    <Ionicons name="alert-circle-outline" size={24} color="#999" />
+                    <Text style={styles.infoValueNoGrade}>Grade unavailable</Text>
                 </View>
             );
         }
-
-        // Use the pre-calculated display value from the price service
-        const displayPrice = cardPrice.displayValue || cardPrice.median || cardPrice.average;
-        const confidence = cardPrice.confidence || 100;
-
-        // Don't show price if confidence is too low
-        if (confidence < 30) {
-            return (
-                <View style={styles.noPriceContainer}>
-                    <Ionicons name="warning-outline" size={20} color="#F57C00" />
-                    <Text style={styles.infoValueNoPrice}>Insufficient sales data</Text>
-                </View>
-            );
-        }
-
-        // Cap at reasonable limits
-        if (displayPrice > (cardType === 'pokemon' ? 100 : 500)) {
-            return (
-                <View style={styles.noPriceContainer}>
-                    <Ionicons name="warning-outline" size={20} color="#F57C00" />
-                    <Text style={styles.infoValueNoPrice}>Value varies - check eBay</Text>
-                </View>
-            );
-        }
-
+        
+        const finalGrade = cardGrade.grade;
+        const gradeDetails = getGradeDetails(finalGrade);
+        
         return (
-            <View style={styles.priceContainer}>
-                <View style={styles.priceMainRow}>
-                    <Text style={styles.infoValuePrice}>${displayPrice.toFixed(2)}</Text>
-                    <View style={styles.priceBadge}>
-                        <Text style={styles.priceBadgeText}>Market Avg</Text>
+            <View style={styles.gradeContainer}>
+                <View style={styles.gradeHeader}>
+                    <View style={[styles.gradeBadge, { backgroundColor: gradeDetails.color }]}>
+                        <Text style={styles.gradeBadgeText}>{gradeDetails.text}</Text>
                     </View>
+                    <Text style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
+                        {finalGrade.toFixed(1)}
+                    </Text>
                 </View>
-
-                {cardPrice.sampleSize > 0 && (
-                    <Text style={styles.priceDetails}>
-                        Based on {cardPrice.sampleSize} recent sales
-                    </Text>
+                
+                {cardGrade.subgrades && (
+                    <View style={styles.subgradesGrid}>
+                        {cardGrade.subgrades.centering !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Centering</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.centering}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.corners !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Corners</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.corners}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.edges !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Edges</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.edges}</Text>
+                            </View>
+                        )}
+                        {cardGrade.subgrades.surface !== undefined && (
+                            <View style={styles.subgradeCard}>
+                                <Text style={styles.subgradeLabel}>Surface</Text>
+                                <Text style={styles.subgradeValue}>{cardGrade.subgrades.surface}</Text>
+                            </View>
+                        )}
+                    </View>
                 )}
-
-                {cardPrice.min && cardPrice.max && cardPrice.min !== cardPrice.max && (
-                    <Text style={styles.priceRange}>
-                        Range: ${cardPrice.min.toFixed(2)} - ${cardPrice.max.toFixed(2)}
-                    </Text>
-                )}
-
-                {cardPrice.sources && cardPrice.sources.length > 0 && (
-                    <Text style={styles.priceSources}>
-                        Sources: {cardPrice.sources.join(', ')}
-                    </Text>
+                
+                {cardGrade.condition && (
+                    <View style={styles.conditionContainer}>
+                        <Text style={styles.conditionText}>Condition: {cardGrade.condition}</Text>
+                    </View>
                 )}
             </View>
         );
@@ -366,8 +385,8 @@ const ValueCard = () => {
                 'Pokémon',
                 cardData.cardNumber,
                 cardData.frontImageUrl,
-                cardPrice?.displayValue || cardPrice?.median || cardPrice?.average || null,
-                null
+                null,
+                cardGrade?.grade 
             );
         } else {
             AddToCollection(
@@ -376,15 +395,11 @@ const ValueCard = () => {
                 cardData.manufacturer,
                 cardData.cardNumber,
                 cardData.frontImageUrl,
-                cardPrice?.displayValue || cardPrice?.average || cardPrice?.median || null,
-                null
+                null,
+                cardGrade?.grade 
             );
         }
         router.push("./collection");
-    };
-
-    const openMarketplace = () => {
-        Linking.openURL(cardData.ebaySearchUrl);
     };
 
     const goHome = () => {
@@ -572,11 +587,11 @@ const ValueCard = () => {
 
                     <View style={styles.infoRow}>
                         <View style={styles.infoIcon}>
-                            <Ionicons name="cash" size={20} color="#98fb98" />
+                            <Ionicons name="ribbon" size={20} color="#4CAF50" />
                         </View>
                         <View style={styles.infoContent}>
-                            <Text style={styles.infoLabel}>Market Value</Text>
-                            {formatPriceDisplay()}
+                            <Text style={styles.infoLabel}>Card Grade</Text>
+                            {formatGradeDisplay()}
                         </View>
                     </View>
 
@@ -621,12 +636,14 @@ const ValueCard = () => {
 
                 <View style={styles.actionsContainer}>
                     <TouchableOpacity
-                        style={styles.marketplaceButton}
-                        onPress={openMarketplace}
+                        style={styles.ebayButton}
+                        onPress={() => {
+                            Linking.openURL(cardData.ebaySearchUrl);
+                        }}
                     >
                         <View style={styles.buttonContent}>
                             <Ionicons name="logo-ebay" size={24} color="#0063D1" />
-                            <Text style={styles.marketplaceButtonText}>View on eBay</Text>
+                            <Text style={styles.ebayButtonText}>View on eBay</Text>
                         </View>
                     </TouchableOpacity>
 
@@ -918,7 +935,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    marketplaceButton: {
+    ebayButton: {
         backgroundColor: '#FFFFFF',
         borderRadius: 12,
         borderWidth: 2,
@@ -931,7 +948,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
-    marketplaceButtonText: {
+    ebayButtonText: {
         color: '#0063D1',
         fontSize: 18,
         fontWeight: '700',
@@ -978,77 +995,91 @@ const styles = StyleSheet.create({
     bottomSpacer: {
         height: 30,
     },
-    // Enhanced price styles
-    priceContainer: {
-        marginTop: 4,
-    },
-    priceMainRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 4,
-    },
-    infoValuePrice: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: '#2E7D32',
-    },
-    priceBadge: {
-        backgroundColor: '#E8F5E9',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    priceBadgeText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#2E7D32',
-        textTransform: 'uppercase',
-    },
-    priceDetails: {
-        fontSize: 13,
-        color: '#666',
-        marginTop: 2,
-    },
-    priceRange: {
-        fontSize: 13,
-        color: '#666',
-        marginTop: 2,
-    },
-    priceNote: {
-        fontSize: 12,
-        color: '#F57C00',
-        marginTop: 2,
-        fontStyle: 'italic',
-    },
-    priceSources: {
-        fontSize: 11,
-        color: '#999',
-        marginTop: 2,
-        fontStyle: 'italic',
-    },
-    priceLoadingContainer: {
+    gradeLoadingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         marginTop: 4,
     },
-    priceLoadingText: {
+    gradeLoadingText: {
         marginLeft: 8,
         fontSize: 14,
         color: '#666',
         fontStyle: 'italic',
     },
-    noPriceContainer: {
+    noGradeContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        marginTop: 4,
+        gap: 8,
     },
-    infoValueNoPrice: {
-        fontSize: 15,
+    infoValueNoGrade: {
+        fontSize: 16,
         color: '#999',
         fontStyle: 'italic',
     },
+    gradeContainer: {
+        marginTop: 4,
+    },
+    gradeHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    gradeBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+    },
+    gradeBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    infoValueGrade: {
+        fontSize: 36,
+        fontWeight: '800',
+    },
+    subgradesGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        marginTop: 8,
+        gap: 8,
+    },
+    subgradeCard: {
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        padding: 12,
+        width: '48%',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    subgradeLabel: {
+        fontSize: 12,
+        color: '#666',
+        marginBottom: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    subgradeValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#333',
+    },
+    conditionContainer: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F0F0',
+        alignItems: 'center',
+    },
+    conditionText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+    },
 });
 
-export default ValueCard;
+export default GradeCard;

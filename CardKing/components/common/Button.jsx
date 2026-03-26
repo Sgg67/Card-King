@@ -1,7 +1,7 @@
-// components/common/Button.jsx (FIXED)
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
+// generally loading button
 const Button = ({ 
   title, 
   onPress, 

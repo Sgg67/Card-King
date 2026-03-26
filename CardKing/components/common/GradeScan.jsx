@@ -1,10 +1,9 @@
-// components/common/CardScan.jsx
-
-//import camera and permissions regarding camera
+// components/common/GradeScan.jsx
+// import camera and permissions from expo
 import { CameraView, useCameraPermissions } from 'expo-camera';
-// import state from react
+// import useState from react
 import { useState, useRef, useEffect } from 'react';
-// import UI components from react native
+// import UI components from React
 import {
   StyleSheet,
   Text,
@@ -20,6 +19,7 @@ import {
 import { useRouter } from 'expo-router'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
+// import auth, storage, and firestore form FireBase config file
 import { auth, storage, firestore } from '../config/FireBase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
@@ -49,7 +49,7 @@ const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => 
         }),
       ]).start();
 
-      // Auto close after 1 second
+      // Auto close after 2 seconds
       const timer = setTimeout(() => {
         onClose();
       }, 2000);
@@ -116,10 +116,9 @@ const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => 
   );
 };
 
-export default function CardScan() {
-  // create a router constant that will be used throughout this file
+export default function GradeScan() {
   const router = useRouter();
-  // create const useState variables that will be used throughout this file
+  // intialize const useState variables
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
@@ -310,7 +309,6 @@ export default function CardScan() {
     }
   };
 
-  // handles the uploading of the card scan to firebase
   const handleScan = async () => {
     if (cameraRef.current) {
       try {
@@ -331,12 +329,13 @@ export default function CardScan() {
         if (!isFrontScanned) {
           const sessionId = `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           setScanSessionId(sessionId);
-
+          // send the front of the card image to firebase
           await uploadImageToFirebase(photo.uri, 'front', sessionId);
 
           setIsFrontScanned(true);
           showCustomAlert('Front Scanned!', 'Front image uploaded successfully. Now flip the card and scan the back side.', 'success');
         } else {
+          // send the back of the card image to firebase
           await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
 
           setIsBackScanned(true);
@@ -352,17 +351,9 @@ export default function CardScan() {
     }
   };
 
-  const handleFinishScan = async () => {
-    try {
-      setIsUploading(true);
-      // Navigate to ValueCard page - it will handle all the analysis
-      router.push('/card-value');
-    } catch (error) {
-      console.error('❌ Error during navigation:', error);
-      showCustomAlert('Error', 'Failed to load card details', 'error');
-    } finally {
-      setIsUploading(false);
-    }
+  const handleFinishScan = () => {
+    // Simply navigate to the grade page - it will handle all the analysis
+    router.push('/grade');
   };
 
   const resetScan = () => {
@@ -591,7 +582,7 @@ export default function CardScan() {
             <View style={styles.finishButtonContent}>
               <AntDesign name="stock" size={24} color="#1A1A2E" />
               <Text style={styles.finishButtonText}>
-                {isUploading ? 'Loading...' : 'Value Card'}
+                {isUploading ? 'Loading...' : 'Grade Card'}
               </Text>
             </View>
           </TouchableOpacity>

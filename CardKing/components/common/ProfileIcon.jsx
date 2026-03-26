@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
 
 const ProfileIcon = ({ size = 40, onPress, showPickerOnPress = true, style }) => {
+    // intialize const useState variables
     const [profileImage, setProfileImage] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [loading, setLoading] = useState(true);

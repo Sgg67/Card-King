@@ -10,6 +10,12 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest"
+=======
+    "test": "jest --watchAll"
+  },
+  "jest": {
+    "preset": "jest-expo"
+>>>>>>> d013cdd338b16ced2f9d6021e5c372879c9793d8
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

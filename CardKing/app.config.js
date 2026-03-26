@@ -10,7 +10,7 @@ export default {
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     splash: {
-      image: "./assets/splash.png",
+      image: "./assets/images/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#ffffff"
     },
@@ -21,15 +21,20 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
+        foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
       package: "com.yourname.cardking"
     },
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/images/favicon.png"
     },
+    scheme: "cardking",
     extra: {
+      eas: {
+        projectId: "d108afc6-1acb-4b8a-8204-f7155cfec596"
+      },
+      ximilarApiKey: process.env.EXPO_XIMILAR_API_KEY,
       googleVisionApiKey: process.env.GOOGLE_VISION_API_KEY,
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,

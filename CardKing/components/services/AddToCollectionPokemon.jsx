@@ -21,8 +21,8 @@ const ensureUserDocument = async (user) => {
     }
 };
 
-// AddToCollection function for sports cards
-export const AddToCollection = async (name, year, manufacturer, card_number, front_scan, price, grade) => {
+// AddToCollection function for Pokemon cards
+export const AddToCollectionPokemon = async (name, year, manufacturer, card_number, front_scan, price, grade) => {
     
     const user = auth.currentUser;
     
@@ -40,15 +40,15 @@ export const AddToCollection = async (name, year, manufacturer, card_number, fro
         
         // Add a new document to the subcollection with auto-generated ID
         const cardData = {
-            player: name,
+            character: name,
             year: year,
             manufacturer: manufacturer,
-            card_number: card_number,
+            // Don't include card_number for Pokemon cards
             image: front_scan,
             addedAt: new Date().toISOString(),
             price: price,
             grade: grade,
-            cardType: 'sports' // Add type identifier
+            cardType: 'pokemon' // Add type identifier
         };
         
         // Use addDoc to create a new card document

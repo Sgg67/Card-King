@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 
+// get all the properties of the card using google vision API
 export const AnalyzeCard = async(front, back) => {
     const extra = Constants.expoConfig?.extra || {};
     const VisionApiKey = extra.googleVisionApiKey;
@@ -384,7 +385,7 @@ const checkRookie = (results) => {
            labels.includes('rookie card') ||
            labels.includes('rookie');
 };
-
+// check if the card is autographed
 const checkAutograph = (results) => {
     const text = results.textAnnotations?.[0]?.description || '';
     const labels = results.labelAnnotations?.map(l => l.description.toLowerCase()) || [];
