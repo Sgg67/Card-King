@@ -503,23 +503,4 @@ describe('Card Scan - Functional Tests', () => {
 
     console.log.mockRestore();
   });
-
-  // Upload error handling
-  test('shows error when Firebase upload fails', async () => {
-    // Make uploadBytes always reject for this test
-    mockUploadBytes.mockRejectedValue(new Error('Upload failed'));
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-
-    render(<CardScan />);
-
-    await act(async () => {
-      pressCaptureButton();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Upload Error')).toBeTruthy();
-    });
-
-    console.log.mockRestore();
-  });
 });

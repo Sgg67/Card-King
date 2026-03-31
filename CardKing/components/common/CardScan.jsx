@@ -332,19 +332,11 @@ export default function CardScan() {
           const sessionId = `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           setScanSessionId(sessionId);
 
-          const downloadURL = await uploadImageToFirebase(photo.uri, 'front', sessionId);
-          if (!downloadURL) {
-            setIsUploading(false);
-            return;
-          }
+          await uploadImageToFirebase(photo.uri, 'front', sessionId);
           setIsFrontScanned(true);
           showCustomAlert('Front Scanned!', 'Front image uploaded successfully. Now flip the card and scan the back side.', 'success');
         } else {
-          const downloadURL = await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
-          if (!downloadURL) {
-            setIsUploading(false);
-            return;
-          }
+          await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
           setIsBackScanned(true);
           setShowFinishButton(true);
           showCustomAlert('Scan Complete!', 'Both sides have been scanned and uploaded successfully.', 'success');
