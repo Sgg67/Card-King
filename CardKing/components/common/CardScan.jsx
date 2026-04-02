@@ -333,12 +333,10 @@ export default function CardScan() {
           setScanSessionId(sessionId);
 
           await uploadImageToFirebase(photo.uri, 'front', sessionId);
-
           setIsFrontScanned(true);
           showCustomAlert('Front Scanned!', 'Front image uploaded successfully. Now flip the card and scan the back side.', 'success');
         } else {
           await uploadImageToFirebase(photo.uri, 'back', scanSessionId);
-
           setIsBackScanned(true);
           setShowFinishButton(true);
           showCustomAlert('Scan Complete!', 'Both sides have been scanned and uploaded successfully.', 'success');
@@ -544,6 +542,7 @@ export default function CardScan() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            testID="capture-button"
             style={[
               styles.captureButton,
               (isFrontScanned && isBackScanned) && styles.captureButtonDisabled,
