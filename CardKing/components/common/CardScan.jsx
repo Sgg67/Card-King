@@ -52,7 +52,7 @@ const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => 
       // Auto close after 1 second
       const timer = setTimeout(() => {
         onClose();
-      }, 2000);
+      }, 1000);
 
       return () => clearTimeout(timer);
     } else {

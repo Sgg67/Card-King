@@ -49,10 +49,10 @@ const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => 
         }),
       ]).start();
 
-      // Auto close after 2 seconds
+      // Auto close after 1 seconds
       const timer = setTimeout(() => {
         onClose();
-      }, 2000);
+      }, 1000);
 
       return () => clearTimeout(timer);
     } else {
