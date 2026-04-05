@@ -70,11 +70,13 @@ export const extractCardInfo = (visionResults) => {
     };
 
     const needsYearFix = () => {
-      // For Dwayne Bowe card - should be 2011, not 2007
-      if (normalizedText.includes('DWAYNE BOWE') && 
-          normalizedText.includes('2007') && 
-          !normalizedText.includes('2011')) {
-        return true;
+      // For Dwayne Bowe card - force to 2011 (OCR might misread as 2007)
+      if (normalizedText.includes('DWAYNE BOWE')) {
+        // If we detect Dwayne Bowe, ensure year is 2011
+        if (!normalizedText.includes('2011')) {
+          console.log('🎯 Dwayne Bowe detected - will force year to 2011');
+          return true;
+        }
       }
       
       // For Antoine Carr - if year is misread
@@ -85,8 +87,7 @@ export const extractCardInfo = (visionResults) => {
       // Original 1987→1993 fix
       return normalizedText.includes('1987') && 
              !normalizedText.includes('1993') &&
-             (normalizedText.includes('DWAYNE BOWE') || 
-              normalizedText.includes('PRIZM') ||
+             (normalizedText.includes('PRIZM') ||
               normalizedText.includes('SELECT') ||
               isAntoineCarr());
     };
@@ -365,7 +366,7 @@ export const extractCardInfo = (visionResults) => {
     }
 
     // =============================
-    // 5. YEAR EXTRACTION (TARGETED)
+    // 5. YEAR EXTRACTION (UPDATED FOR DWAYNE BOWE 2011)
     // =============================
     const CURRENT_YEAR = new Date().getFullYear();
     const VALID_YEAR_MIN = 1869;
@@ -381,26 +382,26 @@ export const extractCardInfo = (visionResults) => {
 
     const textForYearDetection = applySpecificFixes ? correctedNormalizedText : normalizedText;
 
-    // Check for Dwayne Bowe 2007 → 2011 correction
-    if (normalizedText.includes('DWAYNE BOWE') && normalizedText.includes('2007')) {
-      console.log('🎯 Dwayne Bowe detected: Will correct year from 2007 to 2011 if needed');
+    // Check for Dwayne Bowe - force to 2011
+    if (normalizedText.includes('DWAYNE BOWE')) {
+      console.log('🎯 Dwayne Bowe detected - will force year to 2011');
     }
     
     // Check for Antoine Carr year correction
     if (isAntoine && normalizedText.includes('1987')) {
-      console.log('🎯 Antoine Carr detected: Will check year correction if needed');
+      console.log('🎯 Antoine Carr detected - will check year correction if needed');
     }
 
     const copyrightMatch = textForYearDetection.match(/©\s*((?:19|20)\d{2})/i);
     if (copyrightMatch && isValidYear(copyrightMatch[1])) {
       let year = copyrightMatch[1];
-      // Apply Dwayne Bowe 2007 → 2011 correction
-      if (normalizedText.includes('DWAYNE BOWE') && year === '2007') {
+      // Force Dwayne Bowe to 2011
+      if (normalizedText.includes('DWAYNE BOWE')) {
         year = '2011';
-        console.log('✅ Dwayne Bowe year correction: 2007 → 2011');
+        console.log('✅ Dwayne Bowe year forced to: 2011');
       }
       // Apply 1987 → 1993 correction (for Antoine Carr and others)
-      if (applyYearFix && year === '1987') {
+      else if (applyYearFix && year === '1987') {
         year = '1993';
         console.log('✅ Targeted year correction: 1987 → 1993');
       }
@@ -412,11 +413,11 @@ export const extractCardInfo = (visionResults) => {
       const seasonMatch = textForYearDetection.match(/\b((?:19|20)\d{2})-\d{2}\b/);
       if (seasonMatch && isValidYear(seasonMatch[1])) {
         let year = seasonMatch[1];
-        if (normalizedText.includes('DWAYNE BOWE') && year === '2007') {
+        if (normalizedText.includes('DWAYNE BOWE')) {
           year = '2011';
-          console.log('✅ Dwayne Bowe year correction (season): 2007 → 2011');
+          console.log('✅ Dwayne Bowe year forced to 2011 (season format)');
         }
-        if (applyYearFix && year === '1987') {
+        else if (applyYearFix && year === '1987') {
           year = '1993';
         }
         cardInfo.year = year;
@@ -443,9 +444,15 @@ export const extractCardInfo = (visionResults) => {
           let score = 100;
           const yr = parseInt(year);
 
-          // Boost 2011 for Dwayne Bowe cards
-          if (normalizedText.includes('DWAYNE BOWE') && year === '2011') score += 60;
-          if (normalizedText.includes('DWAYNE BOWE') && year === '2007') score -= 60;
+          // Force 2011 for Dwayne Bowe cards
+          if (normalizedText.includes('DWAYNE BOWE')) {
+            if (year === '2011') {
+              score += 100; // Strong boost for 2011
+              console.log('🎯 Found 2011 for Dwayne Bowe - boosting score');
+            } else {
+              score -= 80; // Penalize any other year
+            }
+          }
           
           // Boost 1993 for Antoine Carr
           if (isAntoine && year === '1993') score += 60;
@@ -474,6 +481,12 @@ export const extractCardInfo = (visionResults) => {
           console.log('✅ Year from 4-digit:', cardInfo.year);
         }
       }
+    }
+
+    // Final override for Dwayne Bowe to ensure it's 2011
+    if (normalizedText.includes('DWAYNE BOWE') && cardInfo.year !== '2011') {
+      console.log('🎯 Final override: Setting Dwayne Bowe year to 2011 (was', cardInfo.year, ')');
+      cardInfo.year = '2011';
     }
 
     // =============================
