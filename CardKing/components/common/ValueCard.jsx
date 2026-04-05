@@ -146,6 +146,27 @@ const ValueCard = () => {
         return null;
     };
 
+    // Helper function to remove trailing zeros from card number for display only
+    const formatDisplayCardNumber = (cardNumber) => {
+        if (!cardNumber) return 'N/A';
+        
+        // Check for X/Y format and remove trailing zeros from the total
+        const match = cardNumber.match(/^(\d{1,3})\/(\d+)$/);
+        if (match) {
+            let num = match[1];
+            let total = match[2];
+            // Remove trailing zeros from total
+            total = total.replace(/0+$/, '');
+            // If all zeros were removed, use "1"
+            if (total === '') total = '1';
+            // Remove leading zeros from the number part
+            num = parseInt(num, 10).toString();
+            return `${num}/${total}`;
+        }
+        
+        return cardNumber;
+    };
+
     const analyzeCardImages = async () => {
         try {
             setLoading(true);
@@ -566,7 +587,7 @@ const ValueCard = () => {
                         </View>
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Card Number</Text>
-                            <Text style={styles.infoValue}>{cardData.cardNumber}</Text>
+                            <Text style={styles.infoValue}>{formatDisplayCardNumber(cardData.cardNumber)}</Text>
                         </View>
                     </View>
 
