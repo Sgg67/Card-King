@@ -1,5 +1,7 @@
 # Card King
 
+![Card King Logo]([https://kommodo.ai/i/tOXU6rnxNaqSFwVFEj6d])
+
 ## Our Goal
 Are you interested in the world of sports and Pokemon cards. If so this is the app for you, 
 using Card King you are able to scan and value your cards to determine how much they are worth. 
