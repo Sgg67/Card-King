@@ -26,64 +26,66 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Ultra-aggressive stats calculation for accurate prices
 const calculateStats = (prices, cardType = 'sports') => {
   if (!prices || prices.length === 0) return null;
-  
+
   // Sort prices
   prices.sort((a, b) => a - b);
-  
+
   let filteredPrices = prices;
-  
+
   if (cardType === 'pokemon') {
-    // Remove top 30% and bottom 30% (keep only middle 40%) - more aggressive
-    const startIdx = Math.floor(prices.length * 0.30);
-    const endIdx = Math.floor(prices.length * 0.70);
+    // Balanced filtering - keeps more valid sales
+    // Remove top 20% and bottom 20% (keep middle 60%)
+    const startIdx = Math.floor(prices.length * 0.20);
+    const endIdx = Math.floor(prices.length * 0.80);
     filteredPrices = prices.slice(startIdx, endIdx);
-    
-    // Remove any price that's more than 1.5x the median
+
+    // If we have very few samples, be more lenient
+    if (filteredPrices.length < 5) {
+      filteredPrices = prices.slice(Math.floor(prices.length * 0.10), Math.floor(prices.length * 0.90));
+    }
+
+    // Remove extreme outliers only (prices > 3x median)
     const median = prices[Math.floor(prices.length / 2)];
-    filteredPrices = filteredPrices.filter(price => price <= median * 1.5);
-    
-    // Remove any price over $100 for common cards (lower threshold)
-    filteredPrices = filteredPrices.filter(price => price <= 100);
-    
-    // Additional filtering: remove prices that are more than 3x the minimum
-    const minPrice = filteredPrices[0] || 0;
-    filteredPrices = filteredPrices.filter(price => price <= minPrice * 3);
+    filteredPrices = filteredPrices.filter(price => price <= median * 3);
+
+    // Only filter out ridiculous prices ($1000+ for common cards)
+    filteredPrices = filteredPrices.filter(price => price <= 1000);
   } else {
     // Sports cards - more aggressive filtering
     // Remove top 20% and bottom 20%
     const startIdx = Math.floor(prices.length * 0.20);
     const endIdx = Math.floor(prices.length * 0.80);
     filteredPrices = prices.slice(startIdx, endIdx);
-    
+
     // Use modified IQR method with tighter bounds
     const q1 = filteredPrices[Math.floor(filteredPrices.length * 0.25)];
     const q3 = filteredPrices[Math.floor(filteredPrices.length * 0.75)];
     const iqr = q3 - q1;
     const lowerBound = q1 - (iqr * 1.2); // Tighter lower bound
     const upperBound = q3 + (iqr * 1.2); // Tighter upper bound
-    
-    filteredPrices = filteredPrices.filter(price => 
+
+    filteredPrices = filteredPrices.filter(price =>
       price >= lowerBound && price <= upperBound
     );
-    
+
     // Remove any price over $500 for common sports cards
     filteredPrices = filteredPrices.filter(price => price <= 500);
   }
-  
+
   // If filtering removed too many, use original but with more conservative approach
   const usePrices = filteredPrices.length >= 3 ? filteredPrices : prices;
-  
+
   // Calculate stats
   const median = Number(usePrices[Math.floor(usePrices.length / 2)].toFixed(2));
   const average = Number((usePrices.reduce((a, b) => a + b, 0) / usePrices.length).toFixed(2));
-  
+
   // Get most common price range (mode) - group by $1 for common cards
   const priceRanges = {};
   usePrices.forEach(price => {
     const range = Math.floor(price); // Group by whole dollars
     priceRanges[range] = (priceRanges[range] || 0) + 1;
   });
-  
+
   let mostCommonRange = null;
   let maxCount = 0;
   Object.entries(priceRanges).forEach(([range, count]) => {
@@ -92,7 +94,7 @@ const calculateStats = (prices, cardType = 'sports') => {
       mostCommonRange = parseInt(range);
     }
   });
-  
+
   // Calculate weighted value that leans toward lower end for both types
   let displayValue;
   if (cardType === 'pokemon') {
@@ -110,7 +112,7 @@ const calculateStats = (prices, cardType = 'sports') => {
     // For sports, use the lower of median or 80% of average
     displayValue = Math.min(median, average * 0.8);
   }
-  
+
   return {
     average,
     median,
@@ -127,7 +129,7 @@ const calculateStats = (prices, cardType = 'sports') => {
 
 const extractPricesFromHTML = (html, patterns, excludeKeywords = []) => {
   const prices = [];
-  
+
   for (const pattern of patterns) {
     const regex = new RegExp(pattern, 'gi');
     let match;
@@ -135,12 +137,12 @@ const extractPricesFromHTML = (html, patterns, excludeKeywords = []) => {
       const start = Math.max(0, match.index - 100); // Larger context for better filtering
       const end = Math.min(html.length, match.index + match[0].length + 100);
       const context = html.substring(start, end).toLowerCase();
-      
+
       // Expanded exclude keywords
-      const shouldExclude = excludeKeywords.some(keyword => 
+      const shouldExclude = excludeKeywords.some(keyword =>
         context.includes(keyword.toLowerCase())
       );
-      
+
       if (!shouldExclude) {
         const price = extractPrice(match[0]);
         if (price && price > 0.5 && price < 100000) {
@@ -149,7 +151,7 @@ const extractPricesFromHTML = (html, patterns, excludeKeywords = []) => {
       }
     }
   }
-  
+
   return prices;
 };
 
@@ -159,21 +161,21 @@ const scrape130Point = async (query, prices, sources) => {
   try {
     const searchQuery = query.replace(/\s+/g, '-').toLowerCase();
     const url = `https://130point.com/sales/${searchQuery}`;
-    
+
     const response = await axios.get(url, { headers, timeout: 10000 });
     const html = response.data;
-    
+
     const pricePatterns = [
       '\\$[0-9,]+\\.?[0-9]*',
       '>[0-9,]+\\.?[0-9]*<',
       'price">\\$?[0-9,]+\\.?[0-9]*'
     ];
-    
+
     const foundPrices = extractPricesFromHTML(html, pricePatterns, [
       'grade', 'auction', 'best offer', 'lot', 'bulk', 'set', 'case', 'box',
       'parallel', 'variation', 'error', 'rookie', 'auto', 'relic'
     ]);
-    
+
     if (foundPrices.length > 0) {
       prices.push(...foundPrices);
       if (!sources.includes('130point')) sources.push('130point');
@@ -186,26 +188,26 @@ const scrape130Point = async (query, prices, sources) => {
 const scrapeEbaySold = async (query, prices, sources) => {
   try {
     const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`;
-    
+
     const response = await axios.get(url, { headers, timeout: 10000 });
     const html = response.data;
-    
+
     const pricePatterns = [
       '\\$[0-9,]+\\.\\d{2}',
       's-item__price[^>]*>[^<]*\\$[0-9,]+\\.\\d{2}',
       'data-testid="item-price">[^<]*\\$[0-9,]+\\.\\d{2}'
     ];
-    
+
     const foundPrices = extractPricesFromHTML(html, pricePatterns, [
       'lot', 'bulk', 'case', 'box', 'set', 'job lot', 'collection', 'complete set',
       'booster', 'pack', 'sealed', 'tin', 'etb', 'elite trainer box', 'graded',
       'psa', 'bgs', 'beckett', 'sgc', 'auto', 'autograph', 'relic', 'patch',
       '#' // Skip listings with hashtags (usually parallel/rare variations)
     ]);
-    
+
     // Filter for reasonable prices and remove duplicates
     const validPrices = foundPrices.filter(p => p > 1 && p < 100000);
-    
+
     if (validPrices.length > 0) {
       prices.push(...validPrices);
       if (!sources.includes('ebay')) sources.push('ebay');
@@ -218,24 +220,24 @@ const scrapeEbaySold = async (query, prices, sources) => {
 const scrapeTCGPlayer = async (query, prices, sources) => {
   try {
     const url = `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(query)}`;
-    
+
     const response = await axios.get(url, { headers, timeout: 10000 });
     const html = response.data;
-    
+
     const pricePatterns = [
       '\\$[0-9,]+\\.\\d{2}',
       'market-price">\\$?[0-9,]+\\.\\d{2}',
       'inventory__price-with-shipping">[^<]*\\$[0-9,]+\\.\\d{2}'
     ];
-    
+
     const foundPrices = extractPricesFromHTML(html, pricePatterns, [
       '1st edition', 'unlimited', 'lot', 'bulk', 'played', 'damaged', 'set', 'box',
       'reverse holo', 'holo', 'stamped', 'promo', 'league', 'staff', 'prerelease',
       'championship', 'theme deck', 'ex', 'gx', 'vmax', 'vstar'
     ]);
-    
+
     const validPrices = foundPrices.filter(p => p > 0.5 && p < 10000);
-    
+
     if (validPrices.length > 0) {
       prices.push(...validPrices);
       if (!sources.includes('tcgplayer')) sources.push('tcgplayer');
@@ -249,24 +251,24 @@ const scrapeTCGPlayer = async (query, prices, sources) => {
 
 export const getSportsCardPrice = async (cardQuery) => {
   const query = cardQuery.trim();
-  
+
   const prices = [];
   const sources = [];
-  
+
   await scrape130Point(query, prices, sources);
   await delay(2000);
   await scrapeEbaySold(query, prices, sources);
   await delay(2000);
-  
+
   const stats = calculateStats(prices, 'sports');
-  
+
   console.log(`📊 Sports card price stats for "${query}":`);
   console.log(`   - Total samples: ${stats?.totalSamples || 0}`);
   console.log(`   - Filtered samples: ${stats?.sampleSize || 0}`);
   console.log(`   - Outliers removed: ${stats?.outliersRemoved || 0}`);
   console.log(`   - Display value: $${stats?.displayValue || 'N/A'}`);
   console.log(`   - Confidence: ${stats?.confidence || 0}%`);
-  
+
   return {
     query,
     prices: stats ? prices : [],
@@ -278,24 +280,24 @@ export const getSportsCardPrice = async (cardQuery) => {
 
 export const getPokemonCardPrice = async (cardQuery) => {
   const query = cardQuery.trim();
-  
+
   const prices = [];
   const sources = [];
-  
+
   await scrapeTCGPlayer(query, prices, sources);
   await delay(2000);
   await scrapeEbaySold(query, prices, sources);
   await delay(2000);
-  
+
   const stats = calculateStats(prices, 'pokemon');
-  
+
   console.log(`📊 Pokémon card price stats for "${query}":`);
   console.log(`   - Total samples: ${stats?.totalSamples || 0}`);
   console.log(`   - Filtered samples: ${stats?.sampleSize || 0}`);
   console.log(`   - Outliers removed: ${stats?.outliersRemoved || 0}`);
   console.log(`   - Display value: $${stats?.displayValue || 'N/A'}`);
   console.log(`   - Confidence: ${stats?.confidence || 0}%`);
-  
+
   return {
     query,
     prices: stats ? prices : [],
@@ -316,14 +318,14 @@ export const searchCardPrice = async (cardQuery, type = 'sports') => {
 export const getCardPrice = async (cardQuery) => {
   const prices = [];
   const sources = [];
-  
+
   await scrapeEbaySold(cardQuery, prices, sources);
   await delay(2000);
   await scrape130Point(cardQuery, prices, sources);
   await delay(2000);
-  
+
   const stats = calculateStats(prices, 'sports');
-  
+
   return {
     query: cardQuery,
     prices: stats ? prices : [],

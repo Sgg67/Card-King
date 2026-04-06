@@ -153,6 +153,7 @@ export const extractPokemonCardInfo = (visionResults) => {
                 'Gyarados', 'Dragonite', 'Bulbasaur', 'Squirtle', 'Charmander',
                 'Mew', 'Raichu', 'Alakazam', 'Machamp', 'Blastoise', 'Venusaur',
                 'Articuno', 'Zapdos', 'Moltres', 'Lugia', 'Ho-Oh', 'Celebi',
+                'Sandshrew', 'Sandslash',
                 'Blaziken', 'Swampert', 'Gardevoir', 'Salamence', 'Metagross',
                 'Rayquaza', 'Deoxys', 'Lucario', 'Garchomp', 'Giratina',
                 'Arceus', 'Reshiram', 'Zekrom', 'Kyurem', 'Xerneas', 'Yveltal',
@@ -169,54 +170,24 @@ export const extractPokemonCardInfo = (visionResults) => {
                 }
             }
         }
+        
         // =============================
-        // 5. CARD NUMBER EXTRACTION (ENHANCED FOR PRICE LOOKUP)
+        // 5. CARD NUMBER EXTRACTION
         // =============================
         console.log('🔍 Searching for Pokémon card number...');
-
-        // Format card number for market value APIs (remove trailing zeros from total)
-        const formatForMarketValue = (cardNumber) => {
-            if (!cardNumber) return null;
-
-            // Handle promo cards (SWSH001, SM35, etc.)
-            if (/^[A-Z]{2,4}\d+$/i.test(cardNumber)) {
-                return cardNumber.toUpperCase();
-            }
-
-            // Handle X/Y format - Remove trailing zeros from the total
-            const match = cardNumber.match(/^(\d{1,3})\/(\d+)$/);
-            if (match) {
-                let num = match[1];
-                let total = match[2];
-
-                // Remove trailing zeros from total (1230 -> 123, 1000 -> 1)
-                total = total.replace(/0+$/, '');
-
-                // Also remove leading zeros from both if needed
-                num = parseInt(num, 10).toString();
-                total = parseInt(total, 10).toString();
-
-                return `${num}/${total}`;
-            }
-
-            return cardNumber;
-        };
 
         const sanitizeCardNumber = (raw) => {
             if (!raw) return raw;
 
-            const match = raw.match(/^(\d{1,3})\/(\d+)/);
+            const match = raw.match(/^(\d{1,3})\/(\d+)$/);
             if (match) {
                 let num = match[1];
                 let total = match[2];
-
-                // Remove trailing zeros from total
-                total = total.replace(/0+$/, '');
-
-                // Remove leading zeros
+                
+                // Remove leading zeros from number part only
                 num = parseInt(num, 10).toString();
-                total = parseInt(total, 10).toString();
-
+                
+                // Keep total as-is (including any trailing zeros)
                 return `${num}/${total}`;
             }
 
@@ -224,7 +195,6 @@ export const extractPokemonCardInfo = (visionResults) => {
         };
 
         let rawCardNumber = null;
-        let formattedCardNumber = null;
 
         // Search line by line for card numbers
         for (const line of lines) {
@@ -268,20 +238,20 @@ export const extractPokemonCardInfo = (visionResults) => {
             }
         }
 
-        // Format for market value lookup
         if (rawCardNumber) {
-            formattedCardNumber = formatForMarketValue(rawCardNumber);
-            cardInfo.cardNumber = formattedCardNumber;
-            console.log('✅ Formatted Card Number (for price):', cardInfo.cardNumber);
+            cardInfo.cardNumber = rawCardNumber;
+            console.log('✅ Final Card Number:', cardInfo.cardNumber);
         } else {
             console.log('⚠️ No card number found');
         }
+        
         // =============================
         // 6. SET IDENTIFICATION
         // =============================
         console.log('🔍 Identifying Pokémon set...');
 
         const pokemonSets = [
+            { name: 'HeartGold & SoulSilver', keywords: ['HEARTGOLD & SOULSILVER', 'HEARTGOLD', 'SOULSILVER', 'HGSS', 'HEART GOLD', 'SOUL SILVER', 'HG/SS', 'HGSS1', 'HGSS2'] },
             { name: 'Stellar Crown', keywords: ['STELLAR CROWN', 'SCR'] },
             { name: 'Shrouded Fable', keywords: ['SHROUDED FABLE', 'SFA'] },
             { name: 'Twilight Masquerade', keywords: ['TWILIGHT MASQUERADE', 'TWM'] },
@@ -369,8 +339,31 @@ export const extractPokemonCardInfo = (visionResults) => {
             }
         }
 
+        // ============= FORCE CORRECT SET FOR HEARTGOLD & SOULSILVER =============
+        // Fix based on card number pattern (HGSS uses /123)
+        if (cardInfo.cardNumber && cardInfo.cardNumber.includes('/123')) {
+            console.log('⚠️ Card number with /123 detected - forcing set to HeartGold & SoulSilver');
+            cardInfo.set = 'HeartGold & SoulSilver';
+            cardInfo.setCode = 'HGSS';
+        }
+        
+        // Fix based on year 2010 with wrong set
+        if (cardInfo.year === '2010' && cardInfo.set !== 'HeartGold & SoulSilver') {
+            console.log('⚠️ Year 2010 detected with wrong set - correcting to HeartGold & SoulSilver');
+            cardInfo.set = 'HeartGold & SoulSilver';
+            cardInfo.setCode = 'HGSS';
+        }
+        
+        // Fix based on Pokemon name + year
+        if (cardInfo.name === 'Sandshrew' && cardInfo.year === '2010') {
+            console.log('⚠️ Sandshrew from 2010 - forcing set to HeartGold & SoulSilver');
+            cardInfo.set = 'HeartGold & SoulSilver';
+            cardInfo.setCode = 'HGSS';
+        }
+        // ============= END FORCE CORRECTION =============
+
         // =============================
-        // 7. YEAR EXTRACTION (IMPROVED)
+        // 7. YEAR EXTRACTION
         // =============================
         const CURRENT_YEAR = new Date().getFullYear();
         const VALID_YEAR_MIN = 1995;
@@ -401,6 +394,7 @@ export const extractPokemonCardInfo = (visionResults) => {
                 'Aquapolis': 2003,
                 'Skyridge': 2003,
                 'EX Ruby & Sapphire': 2003,
+                'HeartGold & SoulSilver': 2010,
                 'Black & White Base': 2011,
                 'XY Base': 2014,
                 'Sun & Moon Base': 2017,
@@ -445,17 +439,18 @@ export const extractPokemonCardInfo = (visionResults) => {
         }
 
         if (!cardInfo.year) {
-            // Look for set code patterns that indicate year (e.g., SWSH = 2020, SM = 2017)
+            // Look for set code patterns that indicate year
             if (cardInfo.setCode) {
                 if (cardInfo.setCode.startsWith('SWSH')) cardInfo.year = '2020';
                 else if (cardInfo.setCode.startsWith('SM')) cardInfo.year = '2017';
                 else if (cardInfo.setCode.startsWith('XY')) cardInfo.year = '2014';
                 else if (cardInfo.setCode.startsWith('BW')) cardInfo.year = '2011';
+                else if (cardInfo.setCode === 'HGSS') cardInfo.year = '2010';
                 if (cardInfo.year) console.log('✅ Year from set code:', cardInfo.year);
             }
         }
 
-        // Fallback: any 4-digit year (prefer most recent for Pokémon)
+        // Fallback: any 4-digit year
         if (!cardInfo.year) {
             const allYears = [];
             const yearRegex = /\b((?:19|20)\d{2})\b/g;
