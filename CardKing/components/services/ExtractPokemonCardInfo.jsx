@@ -47,8 +47,6 @@ export const extractPokemonCardInfo = (visionResults) => {
                 { pattern: /GENGAR/gi, replacement: 'GENGAR' },
                 { pattern: /\bHF\b/g, replacement: 'HP' },
                 { pattern: /(\d+)\s*\/\s*(\d+)/g, replacement: '$1/$2' },
-                // Fix common year OCR issues
-                { pattern: /©\s*(\d{4})/gi, replacement: '© $1' },
             ];
             let corrected = text;
             for (const c of corrections) corrected = corrected.replace(c.pattern, c.replacement);
@@ -160,7 +158,7 @@ export const extractPokemonCardInfo = (visionResults) => {
                 'Arceus', 'Reshiram', 'Zekrom', 'Kyurem', 'Xerneas', 'Yveltal',
                 'Greninja', 'Zygarde', 'Solgaleo', 'Lunala', 'Necrozma',
                 'Zacian', 'Zamazenta', 'Eternatus', 'Calyrex', 'Urshifu',
-                'Miraidon', 'Koraidon', 'Sandshrew'
+                'Miraidon', 'Koraidon',
             ];
             for (const pokemon of commonPokemon) {
                 const regex = new RegExp(`\\b${pokemon}\\b`, 'i');
@@ -171,34 +169,77 @@ export const extractPokemonCardInfo = (visionResults) => {
                 }
             }
         }
-
         // =============================
-        // 5. CARD NUMBER EXTRACTION (PRESERVE ORIGINAL TRAILING ZEROS)
+        // 5. CARD NUMBER EXTRACTION (ENHANCED FOR PRICE LOOKUP)
         // =============================
         console.log('🔍 Searching for Pokémon card number...');
 
-        // Keep the EXACT original format - do NOT modify trailing zeros
-        const keepExactFormat = (rawNumber) => {
-            if (!rawNumber) return null;
-            return rawNumber; // Return exactly as found
+        // Format card number for market value APIs (remove trailing zeros from total)
+        const formatForMarketValue = (cardNumber) => {
+            if (!cardNumber) return null;
+
+            // Handle promo cards (SWSH001, SM35, etc.)
+            if (/^[A-Z]{2,4}\d+$/i.test(cardNumber)) {
+                return cardNumber.toUpperCase();
+            }
+
+            // Handle X/Y format - Remove trailing zeros from the total
+            const match = cardNumber.match(/^(\d{1,3})\/(\d+)$/);
+            if (match) {
+                let num = match[1];
+                let total = match[2];
+
+                // Remove trailing zeros from total (1230 -> 123, 1000 -> 1)
+                total = total.replace(/0+$/, '');
+
+                // Also remove leading zeros from both if needed
+                num = parseInt(num, 10).toString();
+                total = parseInt(total, 10).toString();
+
+                return `${num}/${total}`;
+            }
+
+            return cardNumber;
+        };
+
+        const sanitizeCardNumber = (raw) => {
+            if (!raw) return raw;
+
+            const match = raw.match(/^(\d{1,3})\/(\d+)/);
+            if (match) {
+                let num = match[1];
+                let total = match[2];
+
+                // Remove trailing zeros from total
+                total = total.replace(/0+$/, '');
+
+                // Remove leading zeros
+                num = parseInt(num, 10).toString();
+                total = parseInt(total, 10).toString();
+
+                return `${num}/${total}`;
+            }
+
+            return raw;
         };
 
         let rawCardNumber = null;
+        let formattedCardNumber = null;
 
         // Search line by line for card numbers
         for (const line of lines) {
-            // Isolated X/Y number - keep exact format
+            // Isolated X/Y number
             const isolated = line.match(/^(\d{1,3}\/\d+)$/);
             if (isolated) {
-                rawCardNumber = isolated[1];
+                rawCardNumber = sanitizeCardNumber(isolated[1]);
                 console.log('✅ Raw Card Number (isolated):', rawCardNumber);
                 break;
             }
 
-            // Embedded X/Y number - keep exact format
+            // Embedded X/Y number
             const embedded = line.match(/(?<!\d)(\d{1,3}\/\d+)(?!\d)/);
             if (embedded) {
-                rawCardNumber = embedded[1];
+                rawCardNumber = sanitizeCardNumber(embedded[1]);
                 console.log('✅ Raw Card Number (embedded):', rawCardNumber);
                 break;
             }
@@ -220,21 +261,21 @@ export const extractPokemonCardInfo = (visionResults) => {
             for (const pattern of cardNumberPatterns) {
                 const match = correctedNormalized.match(pattern);
                 if (match) {
-                    rawCardNumber = match[1] || match[0];
+                    rawCardNumber = sanitizeCardNumber(match[1] || match[0]);
                     console.log('✅ Raw Card Number (pattern):', rawCardNumber);
                     break;
                 }
             }
         }
 
-        // Store the card number - keep EXACT original format (with trailing zeros)
+        // Format for market value lookup
         if (rawCardNumber) {
-            cardInfo.cardNumber = keepExactFormat(rawCardNumber);
-            console.log('✅ Card Number (keeping original format):', cardInfo.cardNumber);
+            formattedCardNumber = formatForMarketValue(rawCardNumber);
+            cardInfo.cardNumber = formattedCardNumber;
+            console.log('✅ Formatted Card Number (for price):', cardInfo.cardNumber);
         } else {
             console.log('⚠️ No card number found');
         }
-
         // =============================
         // 6. SET IDENTIFICATION
         // =============================
@@ -329,7 +370,7 @@ export const extractPokemonCardInfo = (visionResults) => {
         }
 
         // =============================
-        // 7. YEAR EXTRACTION (IMPROVED - WILL ALWAYS FIND YEAR)
+        // 7. YEAR EXTRACTION (IMPROVED)
         // =============================
         const CURRENT_YEAR = new Date().getFullYear();
         const VALID_YEAR_MIN = 1995;
@@ -341,16 +382,7 @@ export const extractPokemonCardInfo = (visionResults) => {
         };
 
         cardInfo.year = null;
-        // Name-based year overrides
-        const nameYearOverrides = {
-            'Sandshrew': '2010',
-        };
-        if (cardInfo.name && nameYearOverrides[cardInfo.name]) {
-            cardInfo.year = nameYearOverrides[cardInfo.name];
-            console.log('✅ Year from name override:', cardInfo.year);
-        }
         console.log('🔍 Searching for Pokémon year...');
-        console.log('📄 Full text for year search:', correctedText.substring(0, 500));
 
         // Try to get year from set name first (most reliable)
         if (cardInfo.set) {
@@ -382,29 +414,29 @@ export const extractPokemonCardInfo = (visionResults) => {
             }
         }
 
-        // Try to find copyright symbol with year
+        // If not found from set, try copyright patterns
         if (!cardInfo.year) {
-            // Look for © symbol followed by year (most common on Pokémon cards)
-            const copyrightWithSymbol = correctedText.match(/©\s*(\d{4})/i);
-            if (copyrightWithSymbol && isValidYear(copyrightWithSymbol[1])) {
-                cardInfo.year = copyrightWithSymbol[1];
-                console.log('✅ Year from © symbol:', cardInfo.year);
+            // Copyright range pattern (e.g. "©1995-2023 Pokémon")
+            const copyrightRangeMatch = correctedNormalized.match(/©\s*(\d{4})\s*[-–]\s*(\d{4})/);
+            if (copyrightRangeMatch && isValidYear(copyrightRangeMatch[2])) {
+                cardInfo.year = copyrightRangeMatch[2];
+                console.log('✅ Year from copyright range:', cardInfo.year);
             }
         }
 
-        // Look for copyright without symbol (just the word COPYRIGHT)
         if (!cardInfo.year) {
-            const copyrightWordMatch = correctedNormalized.match(/COPYRIGHT\s*(\d{4})/i);
-            if (copyrightWordMatch && isValidYear(copyrightWordMatch[1])) {
-                cardInfo.year = copyrightWordMatch[1];
-                console.log('✅ Year from COPYRIGHT word:', cardInfo.year);
+            // Single copyright year
+            const copyrightMatch = correctedNormalized.match(/©\s*((?:19|20)\d{2})/);
+            if (copyrightMatch && isValidYear(copyrightMatch[1])) {
+                cardInfo.year = copyrightMatch[1];
+                console.log('✅ Year from copyright:', cardInfo.year);
             }
         }
 
-        // Look for Nintendo/Creatures/Game Freak year pattern
         if (!cardInfo.year) {
+            // Nintendo/Creatures/Game Freak year
             const companyYearMatch = correctedNormalized.match(
-                /(\d{4})\s*(?:NINTENDO|CREATURES|GAME FREAK|THE POKEMON COMPANY)/i
+                /(\d{4})\s*(?:NINTENDO|CREATURES|GAME FREAK|THE POKEMON COMPANY)/
             );
             if (companyYearMatch && isValidYear(companyYearMatch[1])) {
                 cardInfo.year = companyYearMatch[1];
@@ -412,27 +444,18 @@ export const extractPokemonCardInfo = (visionResults) => {
             }
         }
 
-        // Look for copyright range (e.g., "1995-2023")
         if (!cardInfo.year) {
-            const copyrightRangeMatch = correctedNormalized.match(/©\s*(\d{4})\s*[-–]\s*(\d{4})/i);
-            if (copyrightRangeMatch && isValidYear(copyrightRangeMatch[2])) {
-                cardInfo.year = copyrightRangeMatch[2];
-                console.log('✅ Year from copyright range (end):', cardInfo.year);
+            // Look for set code patterns that indicate year (e.g., SWSH = 2020, SM = 2017)
+            if (cardInfo.setCode) {
+                if (cardInfo.setCode.startsWith('SWSH')) cardInfo.year = '2020';
+                else if (cardInfo.setCode.startsWith('SM')) cardInfo.year = '2017';
+                else if (cardInfo.setCode.startsWith('XY')) cardInfo.year = '2014';
+                else if (cardInfo.setCode.startsWith('BW')) cardInfo.year = '2011';
+                if (cardInfo.year) console.log('✅ Year from set code:', cardInfo.year);
             }
         }
 
-        // Look for any 4-digit year that appears near the bottom of the card
-        if (!cardInfo.year) {
-            // Get the last 500 characters of the text (copyright is usually at the bottom)
-            const lastPart = correctedText.slice(-500);
-            const bottomYearMatch = lastPart.match(/\b(19|20)\d{2}\b/);
-            if (bottomYearMatch && isValidYear(bottomYearMatch[0])) {
-                cardInfo.year = bottomYearMatch[0];
-                console.log('✅ Year from bottom of card:', cardInfo.year);
-            }
-        }
-
-        // Fallback: any 4-digit year (prefer most recent)
+        // Fallback: any 4-digit year (prefer most recent for Pokémon)
         if (!cardInfo.year) {
             const allYears = [];
             const yearRegex = /\b((?:19|20)\d{2})\b/g;
@@ -444,14 +467,8 @@ export const extractPokemonCardInfo = (visionResults) => {
             if (allYears.length > 0) {
                 allYears.sort((a, b) => parseInt(b) - parseInt(a));
                 cardInfo.year = allYears[0];
-                console.log('✅ Year (fallback from all years):', cardInfo.year);
+                console.log('✅ Year (fallback):', cardInfo.year);
             }
-        }
-
-        // Last resort: use current year
-        if (!cardInfo.year) {
-            cardInfo.year = CURRENT_YEAR.toString();
-            console.log('⚠️ No year found, using current year:', cardInfo.year);
         }
 
         // =============================
@@ -530,8 +547,8 @@ export const extractPokemonCardInfo = (visionResults) => {
             maxScore += 2;
             if (info.cardNumber) score += 2;
 
-            maxScore += 2;
-            if (info.year) score += 2;
+            maxScore += 1;
+            if (info.year) score += 1;
 
             maxScore += 1;
             if (info.hp) score += 1;
