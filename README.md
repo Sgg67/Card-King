@@ -1,6 +1,5 @@
 # Card King
-
-![Card King Logo](logo.png)
+<img src = "logo.png" width = "300">
 
 ## Our Goal
 Are you interested in the world of sports and Pokemon cards. If so this is the app for you, 
