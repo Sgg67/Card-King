@@ -1,5 +1,5 @@
 <div align="center">
-    <h1>Card King</h1>
+    <h1><B>Card King</B></h1>
   <img src="logo.png" width="300">
 </div>
 
