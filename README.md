@@ -1,5 +1,7 @@
 # Card King
 
+![Card King Logo]([https://pub-1407f82391df4ab1951418d04be76914.r2.dev/uploads/680b92a6-fafc-49f5-adb2-58d428965d37.png])
+
 ## Our Goal
 Are you interested in the world of sports and Pokemon cards. If so this is the app for you, 
 using Card King you are able to scan and value your cards to determine how much they are worth. 
