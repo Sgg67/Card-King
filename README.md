@@ -1,6 +1,7 @@
-# Card King
-
-![Card King Logo]([https://pub-1407f82391df4ab1951418d04be76914.r2.dev/uploads/680b92a6-fafc-49f5-adb2-58d428965d37.png])
+<div align="center">
+    <h1><B>Card King</B></h1>
+  <img src="logo.png" width="300">
+</div>
 
 ## Our Goal
 Are you interested in the world of sports and Pokemon cards. If so this is the app for you, 
