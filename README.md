@@ -1,4 +1,4 @@
-# Card King
+#                                                  Card King
 <img src = "logo.png" width = "300">
 
 ## Our Goal
