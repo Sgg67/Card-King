@@ -64,3 +64,57 @@ This allows the users to view their cards in their collection and see the grade 
 ### Profile Picture
 This allows users to be able to upload and change their profile picture from their gallery photos
 <img src="profile.jpg" width="300">
+
+## Running the App
+This app has a downloadable APK for Android and for Apple you can run the app using expo go and by clonig the source code locally.
+
+### Android APK
+## 📱 Download
+
+**[Click here to download the APK on your Android device](https://expo.dev/accounts/sageman/projects/cardking/builds/725facdb-da3d-4ad2-b160-a5e94f823345)**
+
+## Running it on Apple
+
+### Prerequisites
+- Node.js installed on your machine
+- Expo Go app installed on your iphone
+- Same WiFi network for phone and laptop
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/yourusername/Card-King.git
+cd CardKing
+
+```
+
+2. **Create a `.env` file** in the root directory
+```bash
+touch .env
+```
+
+3. **Add the following environment variables** to your `.env` file
+```env
+GOOGLE_VISION_API_KEY=
+EXPO_PUBLIC_FIREBASE_API_KEY=
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+EXPO_PUBLIC_FIREBASE_APP_ID=
+EXPO_NO_ERROR_OVERLAY=
+EXPO_XIMILAR_API_KEY=
+```
+
+4. **Install dependencies**
+```bash
+npm install
+```
+
+5. **Start the development server**
+```bash
+npx expo start
+```
+
+> **Note:** Ensure your phone and laptop are connected to the same WiFi network before running `npx expo start`. Scan the QR code with Expo Go to run the app on your device.
