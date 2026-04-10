@@ -63,7 +63,9 @@ This allows the users to view their cards in their collection and see the grade 
 
 ### Profile Picture
 This allows users to be able to upload and change their profile picture from their gallery photos
+<div align="left">
 <img src="profile.jpg" width="300">
+</div>
 
 ## Running the App
 This app has a downloadable APK for Android and for Apple you can run the app using expo go and by clonig the source code locally.
