@@ -86,6 +86,7 @@ const LoginForm = ({ onLogin, onSignUp }) => {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        testID="email-input"
       />
 
       <Input
@@ -95,6 +96,7 @@ const LoginForm = ({ onLogin, onSignUp }) => {
         onChangeText={setPassword}
         secureTextEntry
         showPasswordToggle
+        testID="password-input"
       />
 
       <TouchableOpacity style={styles.forgotPassword} onPress={handleForgotPassword}>
@@ -138,6 +140,7 @@ const LoginForm = ({ onLogin, onSignUp }) => {
               keyboardType="email-address"
               autoCapitalize="none"
               autoFocus={true}
+              testID="reset-email-input"
             />
             
             <View style={styles.modalButtons}>

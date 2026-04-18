@@ -3,6 +3,7 @@ import {render, fireEvent, waitFor } from '@testing-library/react-native'
 import LoginForm from '../components/common/LoginForm'
 import { TextInput, Alert } from 'react-native'
 import { signIn } from '../components/config/FireBase'
+import { sendPasswordResetEmail } from '../components/config/FireBase'
 
 const mockedReplace = jest.fn()
 
@@ -71,5 +72,64 @@ describe('LoginForm', () => {
         await waitFor(() => {
             expect(alertSpy).toHaveBeenCalledWith('Login Failed', 'Invalid email or password')
         })
+    })
+})
+
+describe('Login UI', () => {
+    test('all main UI elements render', () => {
+        const { getByText, getByPlaceholderText } = render(<LoginForm></LoginForm>);
+
+        expect(getByText('Welcome Back')).toBeTruthy();
+        expect(getByText('Sign in to continue')).toBeTruthy();
+        expect(getByPlaceholderText('your.email@example.com')).toBeTruthy();
+        expect(getByPlaceholderText('Enter your password')).toBeTruthy();
+        expect(getByText('Sign In')).toBeTruthy();
+        expect(getByText('Forgot Password?')).toBeTruthy();
+        expect(getByText('Create Account')).toBeTruthy();
+    }),
+    test('clicking "Forgot Password" result in reset password modal openning', () => {
+        const { getByText, getByText: getByTextInModal } = render(<LoginForm></LoginForm>);
+        fireEvent.press(getByText('Forgot Password?'));
+
+        expect(getByTextInModal('Reset Password')).toBeTruthy();
+        expect(getByTextInModal('Enter your email and we will send you a link to reset your password.')).toBeTruthy();
+    }),
+    test('Reset password modal has email if email was entered previously', () => {
+        const { getByPlaceholderText, getAllByPlaceholderText, getByText } = render(<LoginForm></LoginForm>);
+
+        fireEvent.changeText(getByPlaceholderText('your.email@example.com'),'test@example.com');
+
+        fireEvent.press(getByText('Forgot Password?'));
+
+        const inputs = getAllByPlaceholderText('your.email@example.com');
+
+        expect(inputs[1].props.value).toBe('test@example.com');
+    }),
+    test('alert if reset email is empty', () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        const { getByText } = render(<LoginForm></LoginForm>);
+      
+        fireEvent.press(getByText('Forgot Password?'));
+        fireEvent.press(getByText('Send Reset Link'));
+        expect(alertSpy).toHaveBeenCalledWith('Error', 'Please enter your email address');
+    }),
+    test('reset email successfully sends an email', async () => {
+        sendPasswordResetEmail.mockResolvedValue({ success: true });
+
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+        const { getByText, getByTestId, queryByText } = render(<LoginForm></LoginForm>);
+      
+        fireEvent.press(getByText('Forgot Password?'));
+      
+        fireEvent.changeText(getByTestId('reset-email-input'), 'test@example.com');
+
+        fireEvent.press(getByText('Send Reset Link'));
+      
+        await waitFor(() => {
+          expect(alertSpy).toHaveBeenCalledWith('Success','Password reset email sent!');
+        });
+
+        expect(queryByText('Reset Password')).toBeNull();
     })
 })
