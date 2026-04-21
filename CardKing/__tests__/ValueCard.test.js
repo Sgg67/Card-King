@@ -66,7 +66,7 @@ describe('ValueCard', () => {
         });
 
         AnalyzeCard.mockResolvedValue({
-            front: { textAnnotations: [{ description: 'LeBron James 2020' }] },
+            front: { textAnnotations: [{ description: 'LeBron James 2003' }] },
             back: {},
         });
 
@@ -88,7 +88,7 @@ describe('ValueCard', () => {
             sampleSize: 5,
         });
 
-        const { getByText } = render(<ValueCard />);
+        const { getByText } = render(<ValueCard></ValueCard>);
 
         await waitFor(() => {
         expect(getByText('$100.50')).toBeTruthy();
@@ -132,7 +132,7 @@ describe('ValueCard', () => {
             sampleSize: 10,
         });
 
-        const { getByText } = render(<ValueCard />);
+        const { getByText } = render(<ValueCard></ValueCard>);
 
         await waitFor(() => {
             expect(getByText('Pokémon Card Details')).toBeTruthy();
@@ -176,7 +176,7 @@ describe('ValueCard', () => {
             sampleSize: 0,
         });
   
-        const { getByText } = render(<ValueCard />);
+        const { getByText } = render(<ValueCard></ValueCard>);
   
         await waitFor(() => {
             expect(getByText('Market price unavailable')).toBeTruthy();
@@ -213,7 +213,7 @@ describe('ValueCard', () => {
             sampleSize: 2,
         });
 
-        const { getByText } = render(<ValueCard />);
+        const { getByText } = render(<ValueCard></ValueCard>);
 
         await waitFor(() => {
             expect(getByText('Insufficient sales data')).toBeTruthy();

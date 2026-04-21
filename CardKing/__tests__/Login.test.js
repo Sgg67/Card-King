@@ -76,15 +76,33 @@ describe('LoginForm', () => {
 })
 
 describe('Login UI', () => {
-    test('all main UI elements render', () => {
-        const { getByText, getByPlaceholderText } = render(<LoginForm></LoginForm>);
-
+    test('welcome back renders on form', () => {
+        const { getByText } = render(<LoginForm></LoginForm>);
         expect(getByText('Welcome Back')).toBeTruthy();
+    }),
+    test('sign in continue renders on form', () => {
+        const { getByText } = render(<LoginForm></LoginForm>);
         expect(getByText('Sign in to continue')).toBeTruthy();
+
+    }),
+    test('email placeholder text populates on form', () => {
+        const { getByPlaceholderText } = render(<LoginForm></LoginForm>);
         expect(getByPlaceholderText('your.email@example.com')).toBeTruthy();
+    }),
+    test('password placeholder text populates on form', () => {
+        const { getByPlaceholderText } = render(<LoginForm></LoginForm>);
         expect(getByPlaceholderText('Enter your password')).toBeTruthy();
+    }),
+    test('sign in render on form', () => {
+        const { getByText } = render(<LoginForm></LoginForm>);
         expect(getByText('Sign In')).toBeTruthy();
+    }),
+    test('forgot password renders on form', () => {
+        const { getByText } = render(<LoginForm></LoginForm>);
         expect(getByText('Forgot Password?')).toBeTruthy();
+    }),
+    test('create account renders on form', () => {
+        const { getByText } = render(<LoginForm></LoginForm>);
         expect(getByText('Create Account')).toBeTruthy();
     }),
     test('clicking "Forgot Password" result in reset password modal openning', () => {
@@ -94,7 +112,7 @@ describe('Login UI', () => {
         expect(getByTextInModal('Reset Password')).toBeTruthy();
         expect(getByTextInModal('Enter your email and we will send you a link to reset your password.')).toBeTruthy();
     }),
-    test('Reset password modal has email if email was entered previously', () => {
+    test('reset password modal has email if email was entered previously', () => {
         const { getByPlaceholderText, getAllByPlaceholderText, getByText } = render(<LoginForm></LoginForm>);
 
         fireEvent.changeText(getByPlaceholderText('your.email@example.com'),'test@example.com');

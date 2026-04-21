@@ -334,7 +334,7 @@ const GradeCard = () => {
                     <View style={[styles.gradeBadge, { backgroundColor: gradeDetails.color }]}>
                         <Text style={styles.gradeBadgeText}>{gradeDetails.text}</Text>
                     </View>
-                    <Text style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
+                    <Text testID = "main-grade" style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
                         {finalGrade.toFixed(1)}
                     </Text>
                 </View>
@@ -446,12 +446,14 @@ const GradeCard = () => {
                         </View>
                         <View style={styles.imageControls}>
                             <TouchableOpacity
+                                testID = "rotate-button"
                                 style={styles.controlButton}
                                 onPress={rotateImage}
                             >
                                 <Ionicons name="refresh" size={20} color="#4285F4" />
                             </TouchableOpacity>
                             <TouchableOpacity
+                                testID = "zoom-button"
                                 style={styles.controlButton}
                                 onPress={toggleZoom}
                             >
@@ -636,6 +638,7 @@ const GradeCard = () => {
 
                 <View style={styles.actionsContainer}>
                     <TouchableOpacity
+                        testID = "ebay-button"
                         style={styles.ebayButton}
                         onPress={() => {
                             Linking.openURL(cardData.ebaySearchUrl);
@@ -648,6 +651,7 @@ const GradeCard = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                        testID = "collections-button"
                         style={styles.collectionButton}
                         onPress={addToCollection}
                     >
@@ -658,6 +662,7 @@ const GradeCard = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                        testID = "home-button"
                         style={styles.homeButton}
                         onPress={goHome}
                     >
