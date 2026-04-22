@@ -170,7 +170,7 @@ export const extractPokemonCardInfo = (visionResults) => {
                 }
             }
         }
-        
+
         // =============================
         // 5. CARD NUMBER EXTRACTION
         // =============================
@@ -181,13 +181,8 @@ export const extractPokemonCardInfo = (visionResults) => {
 
             const match = raw.match(/^(\d{1,3})\/(\d+)$/);
             if (match) {
-                let num = match[1];
-                let total = match[2];
-                
-                // Remove leading zeros from number part only
-                num = parseInt(num, 10).toString();
-                
-                // Keep total as-is (including any trailing zeros)
+                let num = parseInt(match[1], 10).toString();
+                let total = parseInt(match[2], 10).toString(); // ← parse total too
                 return `${num}/${total}`;
             }
 
@@ -244,7 +239,7 @@ export const extractPokemonCardInfo = (visionResults) => {
         } else {
             console.log('⚠️ No card number found');
         }
-        
+
         // =============================
         // 6. SET IDENTIFICATION
         // =============================
@@ -346,14 +341,14 @@ export const extractPokemonCardInfo = (visionResults) => {
             cardInfo.set = 'HeartGold & SoulSilver';
             cardInfo.setCode = 'HGSS';
         }
-        
+
         // Fix based on year 2010 with wrong set
         if (cardInfo.year === '2010' && cardInfo.set !== 'HeartGold & SoulSilver') {
             console.log('⚠️ Year 2010 detected with wrong set - correcting to HeartGold & SoulSilver');
             cardInfo.set = 'HeartGold & SoulSilver';
             cardInfo.setCode = 'HGSS';
         }
-        
+
         // Fix based on Pokemon name + year
         if (cardInfo.name === 'Sandshrew' && cardInfo.year === '2010') {
             console.log('⚠️ Sandshrew from 2010 - forcing set to HeartGold & SoulSilver');

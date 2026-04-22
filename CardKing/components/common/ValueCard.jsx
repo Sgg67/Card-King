@@ -79,9 +79,26 @@ const ValueCard = () => {
         try {
             setImageLoading(true);
 
+            // Read EXIF data to get actual orientation
+            const imageInfo = await ImageManipulator.manipulateAsync(
+                imageUri,
+                [],
+                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+            );
+
+            // Get image dimensions to detect if it's landscape (rotated)
+            const { width: imgWidth, height: imgHeight } = imageInfo;
+
+            let rotationNeeded = 0;
+
+            // If width > height, the image is in landscape and needs rotation
+            if (imgWidth > imgHeight) {
+                rotationNeeded = 90;
+            }
+
             const manipResult = await ImageManipulator.manipulateAsync(
                 imageUri,
-                [{ rotate: 0 }],
+                rotationNeeded ? [{ rotate: rotationNeeded }] : [],
                 { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
             );
 
@@ -178,8 +195,10 @@ const ValueCard = () => {
                 if (!cardInfo.cardNumber || cardInfo.cardNumber === 'N/A') {
                     const manualCardNumber = extractCardNumberManually(cardInfo.fullText);
                     if (manualCardNumber) {
-                        cardInfo.cardNumber = manualCardNumber;
-                        console.log('🔢 Manually extracted card number:', manualCardNumber);
+                        cardInfo.cardNumber = manualCardNumber.replace(/(\d+)\s*\/\s*(\d+)/, (_, n, t) =>
+                            `${parseInt(n, 10)}/${parseInt(t, 10)}`
+                        );
+                        console.log('🔢 Manually extracted card number:', cardInfo.cardNumber);
                     }
                 }
 

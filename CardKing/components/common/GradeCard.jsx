@@ -51,11 +51,11 @@ const GradeCard = () => {
         isRookie: false,
         isAutograph: false,
         isRelic: false,
-        
+
         // Pokémon card fields
         character: null,
         set: null,
-        
+
         // Common fields
         searchQuery: null,
         ebaySearchUrl: null,
@@ -82,13 +82,30 @@ const GradeCard = () => {
     const processImageOrientation = async (imageUri) => {
         try {
             setImageLoading(true);
-            
-            const manipResult = await ImageManipulator.manipulateAsync(
+
+            // Read EXIF data to get actual orientation
+            const imageInfo = await ImageManipulator.manipulateAsync(
                 imageUri,
-                [{ rotate: 0 }],
+                [],
                 { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
             );
-            
+
+            // Get image dimensions to detect if it's landscape (rotated)
+            const { width: imgWidth, height: imgHeight } = imageInfo;
+
+            let rotationNeeded = 0;
+
+            // If width > height, the image is in landscape and needs rotation
+            if (imgWidth > imgHeight) {
+                rotationNeeded = 90;
+            }
+
+            const manipResult = await ImageManipulator.manipulateAsync(
+                imageUri,
+                rotationNeeded ? [{ rotate: rotationNeeded }] : [],
+                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
+            );
+
             setProcessedImageUrl(manipResult.uri);
         } catch (error) {
             console.error('Error processing image orientation:', error);
@@ -103,21 +120,21 @@ const GradeCard = () => {
         const frontText = visionResults.front?.textAnnotations?.[0]?.description || '';
         const backText = visionResults.back?.textAnnotations?.[0]?.description || '';
         const combinedText = (frontText + ' ' + backText).toUpperCase();
-        
+
         const pokemonKeywords = [
             'POKEMON', 'HP', 'WEAKNESS', 'RESISTANCE', 'RETREAT',
             'ILLUSTRATOR', 'BASIC', 'STAGE 1', 'STAGE 2', 'POKEMON POWER',
             'BODY', 'POKE-BODY', 'POKE-POWER', 'ABILITY', 'NINTENDO',
             'CREATURES', 'GAME FREAK', 'ENERGY', 'TRAINER', 'SUPPORTER'
         ];
-        
+
         for (const keyword of pokemonKeywords) {
             if (combinedText.includes(keyword)) {
                 console.log('🎴 Detected Pokémon card by keyword:', keyword);
                 return 'pokemon';
             }
         }
-        
+
         if (visionResults.front?.webDetection?.bestGuessLabels) {
             const guesses = visionResults.front.webDetection.bestGuessLabels;
             for (const guess of guesses) {
@@ -127,27 +144,27 @@ const GradeCard = () => {
                 }
             }
         }
-        
+
         return 'sports';
     };
 
     const extractYearManually = (text) => {
         const copyrightMatch = text.match(/©\s*(\d{4})/i);
         if (copyrightMatch) return copyrightMatch[1];
-        
+
         const yearMatch = text.match(/\b(19|20)\d{2}\b/);
         if (yearMatch) return yearMatch[0];
-        
+
         return null;
     };
 
     const extractCardNumberManually = (text) => {
         const slashPattern = text.match(/\b(\d{1,4}\s*\/\s*\d{1,4})\b/);
         if (slashPattern) return slashPattern[1];
-        
+
         const setPrefixPattern = text.match(/\b(SWSH|SM|XY|BW|DP|SSH|RCL|DAA|VIV|EVO)\d{1,4}\b/i);
         if (setPrefixPattern) return setPrefixPattern[0];
-        
+
         return null;
     };
     // get the images from the card
@@ -163,16 +180,16 @@ const GradeCard = () => {
             }
 
             const visionResults = await AnalyzeCard(frontUrl, backUrl);
-            
+
             const detectedType = detectCardType(visionResults);
             setCardType(detectedType);
-            
+
             // if the card is pokemon analyze the Pokemon card using the extractPokemonCardInfo function
             let cardInfo;
             if (detectedType === 'pokemon') {
                 cardInfo = extractPokemonCardInfo(visionResults);
                 console.log('📋 Using Pokémon card extractor');
-                
+
                 if (!cardInfo.year) {
                     const manualYear = extractYearManually(cardInfo.fullText);
                     if (manualYear) {
@@ -180,15 +197,17 @@ const GradeCard = () => {
                         console.log('📅 Manually extracted year:', manualYear);
                     }
                 }
-                
+
                 if (!cardInfo.cardNumber || cardInfo.cardNumber === 'N/A') {
                     const manualCardNumber = extractCardNumberManually(cardInfo.fullText);
                     if (manualCardNumber) {
-                        cardInfo.cardNumber = manualCardNumber;
-                        console.log('🔢 Manually extracted card number:', manualCardNumber);
+                        cardInfo.cardNumber = manualCardNumber.replace(/(\d+)\s*\/\s*(\d+)/, (_, n, t) =>
+                            `${parseInt(n, 10)}/${parseInt(t, 10)}`
+                        );
+                        console.log('🔢 Manually extracted card number:', cardInfo.cardNumber);
                     }
                 }
-                
+
                 console.log('📦 Extracted Set:', cardInfo.set);
                 console.log('🎴 Extracted Name:', cardInfo.name);
                 console.log('🔢 Final Card Number:', cardInfo.cardNumber);
@@ -197,9 +216,9 @@ const GradeCard = () => {
                 cardInfo = extractCardInfo(visionResults);
                 console.log('📋 Using sports card extractor');
             }
-            
+
             const lookupResults = await lookupCardFromWebMatches(cardInfo, cardInfo.webMatches || []);
-            
+
             let searchQuery;
             if (detectedType === 'pokemon') {
                 searchQuery = lookupResults.searchQuery ||
@@ -260,7 +279,7 @@ const GradeCard = () => {
     // this function calls the Ximilar API and gets back the grade
     const fetchCardGrade = async () => {
         if (!cardData.frontImageUrl || !cardData.backImageUrl) return;
-        
+
         setGradeLoading(true);
         try {
             const gradeResult = await gradeCard(cardData.frontImageUrl, cardData.backImageUrl);
@@ -315,7 +334,7 @@ const GradeCard = () => {
                 </View>
             );
         }
-        
+
         if (!cardGrade || !cardGrade.grade) {
             return (
                 <View style={styles.noGradeContainer}>
@@ -324,21 +343,21 @@ const GradeCard = () => {
                 </View>
             );
         }
-        
+
         const finalGrade = cardGrade.grade;
         const gradeDetails = getGradeDetails(finalGrade);
-        
+
         return (
             <View style={styles.gradeContainer}>
                 <View style={styles.gradeHeader}>
                     <View style={[styles.gradeBadge, { backgroundColor: gradeDetails.color }]}>
                         <Text style={styles.gradeBadgeText}>{gradeDetails.text}</Text>
                     </View>
-                    <Text testID = "main-grade" style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
+                    <Text testID="main-grade" style={[styles.infoValueGrade, { color: gradeDetails.color }]}>
                         {finalGrade.toFixed(1)}
                     </Text>
                 </View>
-                
+
                 {cardGrade.subgrades && (
                     <View style={styles.subgradesGrid}>
                         {cardGrade.subgrades.centering !== undefined && (
@@ -367,7 +386,7 @@ const GradeCard = () => {
                         )}
                     </View>
                 )}
-                
+
                 {cardGrade.condition && (
                     <View style={styles.conditionContainer}>
                         <Text style={styles.conditionText}>Condition: {cardGrade.condition}</Text>
@@ -386,7 +405,7 @@ const GradeCard = () => {
                 cardData.cardNumber,
                 cardData.frontImageUrl,
                 null,
-                cardGrade?.grade 
+                cardGrade?.grade
             );
         } else {
             AddToCollection(
@@ -396,7 +415,7 @@ const GradeCard = () => {
                 cardData.cardNumber,
                 cardData.frontImageUrl,
                 null,
-                cardGrade?.grade 
+                cardGrade?.grade
             );
         }
         router.push("./collection");
@@ -446,14 +465,14 @@ const GradeCard = () => {
                         </View>
                         <View style={styles.imageControls}>
                             <TouchableOpacity
-                                testID = "rotate-button"
+                                testID="rotate-button"
                                 style={styles.controlButton}
                                 onPress={rotateImage}
                             >
                                 <Ionicons name="refresh" size={20} color="#4285F4" />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                testID = "zoom-button"
+                                testID="zoom-button"
                                 style={styles.controlButton}
                                 onPress={toggleZoom}
                             >
@@ -638,7 +657,7 @@ const GradeCard = () => {
 
                 <View style={styles.actionsContainer}>
                     <TouchableOpacity
-                        testID = "ebay-button"
+                        testID="ebay-button"
                         style={styles.ebayButton}
                         onPress={() => {
                             Linking.openURL(cardData.ebaySearchUrl);
@@ -651,7 +670,7 @@ const GradeCard = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        testID = "collections-button"
+                        testID="collections-button"
                         style={styles.collectionButton}
                         onPress={addToCollection}
                     >
@@ -662,7 +681,7 @@ const GradeCard = () => {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        testID = "home-button"
+                        testID="home-button"
                         style={styles.homeButton}
                         onPress={goHome}
                     >
