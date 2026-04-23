@@ -227,7 +227,7 @@ export default function CollectionView() {
                 <Image
                   source={{ uri: item.image || item.front_scan }}
                   style={styles.cardImage}
-                  resizeMode="contain"  // Changed from "cover" to "contain" to show full card
+                  resizeMode="contain"
                 />
               ) : (
                 <View style={styles.placeholderImage}>
@@ -326,7 +326,7 @@ export default function CollectionView() {
             tintColor="#1976d2"
           />
         }
-        contentContainerStyle={cards.length === 0 ? styles.emptyContainer : styles.listContent}
+        contentContainerStyle={cards.length === 0 ? styles.emptyContainer : [styles.listContent, { paddingBottom: 100 }]}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="cards-outline" size={80} color="#ccc" />
@@ -426,7 +426,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 120,
   },
   card: {
     backgroundColor: '#ffffff',
@@ -441,10 +440,10 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    height: 280,  // Increased height to better accommodate the full card
+    height: 280,
     backgroundColor: '#f0f0f0',
-    justifyContent: 'center',  // Center the image vertically
-    alignItems: 'center',      // Center the image horizontally
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardImage: {
     width: '100%',
@@ -700,7 +699,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    marginBottom: Platform.OS === 'ios' ? 40 : 35,
+    marginBottom: Platform.OS === 'ios' ? 30 : 20,
     gap: 8,
   },
   homeIconWrapper: {

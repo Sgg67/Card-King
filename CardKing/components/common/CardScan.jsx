@@ -18,6 +18,7 @@ import {
   Animated
 } from 'react-native';
 import { useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { auth, storage, firestore } from '../config/FireBase';
@@ -119,6 +120,9 @@ const CustomAlert = ({ visible, title, message, onClose, type = 'success' }) => 
 export default function CardScan() {
   // create a router constant that will be used throughout this file
   const router = useRouter();
+  // Safe area insets — gives us the home indicator height on iPhone, nav bar on Android
+  const insets = useSafeAreaInsets();
+
   // create const useState variables that will be used throughout this file
   const [showFinishButton, setShowFinishButton] = useState(false);
   const [facing, setFacing] = useState('back');
@@ -375,6 +379,11 @@ export default function CardScan() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
+  // The controls bar height + safe area bottom inset so the finish button
+  // always floats above both the controls bar AND the phone's home indicator.
+  const CONTROLS_BAR_HEIGHT = 110; // approximate height of controlsContainer
+  const finishButtonBottom = CONTROLS_BAR_HEIGHT + Math.max(insets.bottom, 16);
+
   return (
     <View style={styles.container}>
       {/* Custom Alert */}
@@ -515,14 +524,29 @@ export default function CardScan() {
               <Text style={styles.scanGuideText}>
                 {isFrontScanned ? 'Scan Back Side' : 'Scan Front Side'}
               </Text>
-              {/* Removed the middle-of-screen upload indicator */}
             </View>
             <View style={[styles.corner, styles.cornerBottomLeft]} />
             <View style={[styles.corner, styles.cornerBottomRight]} />
           </View>
         </View>
 
-        <View style={styles.controlsContainer}>
+        {/* FINISH BUTTON — sits just above the controls bar, safe area aware */}
+        {showFinishButton && (
+          <TouchableOpacity
+            style={[styles.finishButton, { bottom: finishButtonBottom }]}
+            onPress={handleFinishScan}
+            disabled={isUploading}
+          >
+            <View style={styles.finishButtonContent}>
+              <AntDesign name="stock" size={20} color="#1A1A2E" />
+              <Text style={styles.finishButtonText}>
+                {isUploading ? 'Loading...' : 'Value Card'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        <View style={[styles.controlsContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={resetScan}
@@ -579,22 +603,6 @@ export default function CardScan() {
             </Text>
           </TouchableOpacity>
         </View>
-
-        {/* FINISH BUTTON */}
-        {showFinishButton && (
-          <TouchableOpacity
-            style={styles.finishButton}
-            onPress={handleFinishScan}
-            disabled={isUploading}
-          >
-            <View style={styles.finishButtonContent}>
-              <AntDesign name="stock" size={24} color="#1A1A2E" />
-              <Text style={styles.finishButtonText}>
-                {isUploading ? 'Loading...' : 'Value Card'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
       </CameraView>
     </View>
   );
@@ -868,10 +876,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingVertical: 20,
+    paddingTop: 20,
     paddingHorizontal: 30,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    // paddingBottom is set inline using insets.bottom so it adapts per device
   },
   captureButton: {
     width: 70,
@@ -912,11 +921,11 @@ const styles = StyleSheet.create({
   },
   finishButton: {
     position: 'absolute',
-    bottom: 150,
     alignSelf: 'center',
+    // `bottom` is set inline dynamically using insets
     backgroundColor: '#FFD700',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
     borderRadius: 30,
     elevation: 8,
     shadowColor: '#000',
@@ -930,9 +939,9 @@ const styles = StyleSheet.create({
   },
   finishButtonText: {
     color: '#1A1A2E',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
-    marginLeft: 10,
+    marginLeft: 8,
   },
   // Custom Alert Styles
   customAlertOverlay: {

@@ -3,9 +3,15 @@ import { render, fireEvent, waitFor, screen, act } from '@testing-library/react-
 import { Alert } from 'react-native';
 import CardScan from '../components/common/CardScan';
 
+
 // Mock expo-router
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  SafeAreaProvider: ({ children }) => children,
+}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
