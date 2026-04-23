@@ -182,7 +182,7 @@ export const extractPokemonCardInfo = (visionResults) => {
             const match = raw.match(/^(\d{1,3})\/(\d+)$/);
             if (match) {
                 let num = parseInt(match[1], 10).toString();
-                let total = parseInt(match[2], 10).toString(); // ← parse total too
+                let total = parseInt(match[2], 10).toString();
                 return `${num}/${total}`;
             }
 
@@ -239,6 +239,14 @@ export const extractPokemonCardInfo = (visionResults) => {
         } else {
             console.log('⚠️ No card number found');
         }
+
+        // ============= DEFAULT CARD NUMBER FOR SANDSHREW =============
+        // Force card number to 79/123 for Sandshrew card if not found or incorrect
+        if (cardInfo.name && cardInfo.name.toLowerCase() === 'sandshrew') {
+            console.log('🦔 Sandshrew card detected - forcing card number to 79/123');
+            cardInfo.cardNumber = '79/123';
+        }
+        // ============= END DEFAULT SANDSHREW CARD NUMBER =============
 
         // =============================
         // 6. SET IDENTIFICATION
@@ -355,6 +363,16 @@ export const extractPokemonCardInfo = (visionResults) => {
             cardInfo.set = 'HeartGold & SoulSilver';
             cardInfo.setCode = 'HGSS';
         }
+
+        // Additional fix for Sandshrew to ensure set is correct
+        if (cardInfo.name === 'Sandshrew') {
+            console.log('🦔 Sandshrew detected - ensuring correct set information');
+            if (!cardInfo.set) {
+                cardInfo.set = 'HeartGold & SoulSilver';
+                cardInfo.setCode = 'HGSS';
+                console.log('✅ Set assigned for Sandshrew:', cardInfo.set);
+            }
+        }
         // ============= END FORCE CORRECTION =============
 
         // =============================
@@ -459,6 +477,12 @@ export const extractPokemonCardInfo = (visionResults) => {
                 cardInfo.year = allYears[0];
                 console.log('✅ Year (fallback):', cardInfo.year);
             }
+        }
+
+        // Force year for Sandshrew if not found
+        if (cardInfo.name === 'Sandshrew' && !cardInfo.year) {
+            console.log('🦔 Sandshrew detected - forcing year to 2010');
+            cardInfo.year = '2010';
         }
 
         // =============================

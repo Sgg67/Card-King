@@ -38,7 +38,6 @@ const GradeCard = () => {
     const [imageLoading, setImageLoading] = useState(true);
     const [imageZoomed, setImageZoomed] = useState(false);
     const [imageRotation, setImageRotation] = useState(0);
-    const [processedImageUrl, setProcessedImageUrl] = useState(null);
     const [cardType, setCardType] = useState('sports');
     const scrollViewRef = useRef(null);
     const [cardData, setCardData] = useState({
@@ -67,11 +66,8 @@ const GradeCard = () => {
         analyzeCardImages();
     }, []);
 
-    useEffect(() => {
-        if (cardData.frontImageUrl) {
-            processImageOrientation(cardData.frontImageUrl);
-        }
-    }, [cardData.frontImageUrl]);
+    // Removed the auto-orientation useEffect
+    // The image will now display in its original orientation
 
     useEffect(() => {
         if (cardData.frontImageUrl && cardData.backImageUrl) {
@@ -79,41 +75,7 @@ const GradeCard = () => {
         }
     }, [cardData.frontImageUrl, cardData.backImageUrl]);
 
-    const processImageOrientation = async (imageUri) => {
-        try {
-            setImageLoading(true);
-
-            // Read EXIF data to get actual orientation
-            const imageInfo = await ImageManipulator.manipulateAsync(
-                imageUri,
-                [],
-                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
-            );
-
-            // Get image dimensions to detect if it's landscape (rotated)
-            const { width: imgWidth, height: imgHeight } = imageInfo;
-
-            let rotationNeeded = 0;
-
-            // If width > height, the image is in landscape and needs rotation
-            if (imgWidth > imgHeight) {
-                rotationNeeded = 90;
-            }
-
-            const manipResult = await ImageManipulator.manipulateAsync(
-                imageUri,
-                rotationNeeded ? [{ rotate: rotationNeeded }] : [],
-                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
-            );
-
-            setProcessedImageUrl(manipResult.uri);
-        } catch (error) {
-            console.error('Error processing image orientation:', error);
-            setProcessedImageUrl(imageUri);
-        } finally {
-            setImageLoading(false);
-        }
-    };
+    // Removed processImageOrientation function entirely since autorotation is disabled
 
     // detect wether the card is pokemon or sports
     const detectCardType = (visionResults) => {
@@ -268,9 +230,14 @@ const GradeCard = () => {
                 });
             }
 
+            // ✅ FIX: Set image loading to false after card data is set
+            setImageLoading(false);
+
         } catch (error) {
             console.error('Error analyzing card:', error);
             Alert.alert('Error', 'Failed to analyze card images');
+            // ✅ Also set imageLoading to false on error
+            setImageLoading(false);
         } finally {
             setLoading(false);
         }
@@ -497,7 +464,7 @@ const GradeCard = () => {
                         {imageLoading ? (
                             <View style={styles.imageLoadingContainer}>
                                 <ActivityIndicator size="large" color="#4285F4" />
-                                <Text style={styles.imageLoadingText}>Adjusting orientation...</Text>
+                                <Text style={styles.imageLoadingText}>Loading image...</Text>
                             </View>
                         ) : (
                             <View style={[
@@ -505,7 +472,7 @@ const GradeCard = () => {
                                 { transform: [{ rotate: `${imageRotation}deg` }] }
                             ]}>
                                 <Image
-                                    source={{ uri: processedImageUrl || cardData.frontImageUrl }}
+                                    source={{ uri: cardData.frontImageUrl }}
                                     style={[
                                         styles.cardImage,
                                         imageZoomed && styles.cardImageZoomed
@@ -518,7 +485,7 @@ const GradeCard = () => {
 
                     <View style={styles.imageFooter}>
                         <Text style={styles.imageHint}>
-                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} • Rotate to adjust
+                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} • Use rotate button to adjust orientation
                         </Text>
                     </View>
                 </View>

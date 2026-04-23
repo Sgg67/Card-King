@@ -324,10 +324,12 @@ export default function GradeScan() {
           return;
         }
 
+        // Removed automatic rotation by setting skipProcessing to true
+        // This prevents the camera from automatically rotating the image based on device orientation
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
-          skipProcessing: false,
-          exif: true,
+          skipProcessing: true, // This prevents autorotation
+          exif: false, // Disable EXIF to avoid orientation metadata
         });
 
         if (!isFrontScanned) {

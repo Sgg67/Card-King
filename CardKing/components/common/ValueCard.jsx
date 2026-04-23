@@ -63,11 +63,8 @@ const ValueCard = () => {
         analyzeCardImages();
     }, []);
 
-    useEffect(() => {
-        if (cardData.frontImageUrl) {
-            processImageOrientation(cardData.frontImageUrl);
-        }
-    }, [cardData.frontImageUrl]);
+    // Removed the auto-orientation useEffect
+    // The image will now display in its original orientation
 
     useEffect(() => {
         if (cardData.searchQuery) {
@@ -75,41 +72,7 @@ const ValueCard = () => {
         }
     }, [cardData.searchQuery, cardType]);
 
-    const processImageOrientation = async (imageUri) => {
-        try {
-            setImageLoading(true);
-
-            // Read EXIF data to get actual orientation
-            const imageInfo = await ImageManipulator.manipulateAsync(
-                imageUri,
-                [],
-                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
-            );
-
-            // Get image dimensions to detect if it's landscape (rotated)
-            const { width: imgWidth, height: imgHeight } = imageInfo;
-
-            let rotationNeeded = 0;
-
-            // If width > height, the image is in landscape and needs rotation
-            if (imgWidth > imgHeight) {
-                rotationNeeded = 90;
-            }
-
-            const manipResult = await ImageManipulator.manipulateAsync(
-                imageUri,
-                rotationNeeded ? [{ rotate: rotationNeeded }] : [],
-                { compress: 1, format: ImageManipulator.SaveFormat.JPEG, base64: false }
-            );
-
-            setProcessedImageUrl(manipResult.uri);
-        } catch (error) {
-            console.error('Error processing image orientation:', error);
-            setProcessedImageUrl(imageUri);
-        } finally {
-            setImageLoading(false);
-        }
-    };
+    // Removed processImageOrientation function entirely since autorotation is disabled
 
     const detectCardType = (visionResults) => {
         const frontText = visionResults.front?.textAnnotations?.[0]?.description || '';
@@ -259,9 +222,14 @@ const ValueCard = () => {
                 });
             }
 
+            // ✅ FIX: Set imageLoading to false after card data is set
+            setImageLoading(false);
+
         } catch (error) {
             console.error('Error analyzing card:', error);
             Alert.alert('Error', 'Failed to analyze card images');
+            // ✅ Also set imageLoading to false on error
+            setImageLoading(false);
         } finally {
             setLoading(false);
         }
@@ -480,7 +448,7 @@ const ValueCard = () => {
                         {imageLoading ? (
                             <View style={styles.imageLoadingContainer}>
                                 <ActivityIndicator size="large" color="#4285F4" />
-                                <Text style={styles.imageLoadingText}>Adjusting orientation...</Text>
+                                <Text style={styles.imageLoadingText}>Loading image...</Text>
                             </View>
                         ) : (
                             <View style={[
@@ -488,7 +456,7 @@ const ValueCard = () => {
                                 { transform: [{ rotate: `${imageRotation}deg` }] }
                             ]}>
                                 <Image
-                                    source={{ uri: processedImageUrl || cardData.frontImageUrl }}
+                                    source={{ uri: cardData.frontImageUrl }}
                                     style={[
                                         styles.cardImage,
                                         imageZoomed && styles.cardImageZoomed
@@ -501,7 +469,7 @@ const ValueCard = () => {
 
                     <View style={styles.imageFooter}>
                         <Text style={styles.imageHint}>
-                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} • Rotate to adjust
+                            Tap image to {imageZoomed ? 'zoom out' : 'zoom in'} • Use rotate button to adjust orientation
                         </Text>
                     </View>
                 </View>
