@@ -73,7 +73,7 @@ This app has a downloadable APK for Android and for Apple you can run the app us
 ### Android APK
 ## 📱 Download
 
-**[Click here to download the APK on your Android device](https://expo.dev/accounts/sageman/projects/cardking/builds/880bb71e-7006-4ca3-87b5-98fbce8ad899)**
+**[Click here to download the APK on your Android device](https://expo.dev/accounts/sageman/projects/cardking/builds/a7ba644b-6559-4c28-908d-df668f8d1a92)**
 
 ## Running it on Apple
 
