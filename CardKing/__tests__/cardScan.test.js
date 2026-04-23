@@ -280,8 +280,8 @@ describe('Card Scan - Functional Tests', () => {
     await waitFor(() => {
       expect(mockTakePictureAsync).toHaveBeenCalledWith({
         quality: 0.8,
-        skipProcessing: false,
-        exif: true,
+        skipProcessing: true,
+        exif: false,
       });
     });
   });
@@ -495,7 +495,7 @@ describe('Card Scan - Functional Tests', () => {
   // Camera error handling
   test('shows error when camera fails to capture', async () => {
     mockTakePictureAsync.mockRejectedValueOnce(new Error('Camera failed'));
-    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => { });
 
     render(<CardScan />);
 
