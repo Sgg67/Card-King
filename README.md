@@ -120,3 +120,22 @@ npx expo start
 ```
 
 > **Note:** Ensure your phone and laptop are connected to the same WiFi network before running `npx expo start`. Scan the QR code with Expo Go to run the app on your device.
+
+## Running the Test Files
+
+### Prerequisites
+- Jest is installed
+- React Native Testing Library is installed
+
+### Installation
+
+1. **Install dependencies**
+```bash
+cd CardKing
+npm install
+```
+2. **Run Test Suites**
+```
+npm test
+```
+> **Note:** 'npm test' will run all available test suites found in the __tests__ folder. To compile and run a specific suite, use the command 'npm test __tests__/{REPLACE WITH TEST FILE NAME}'.
