@@ -123,7 +123,7 @@ npx expo start
 
 ## Running the Test Files
 
-### Prerequisites
+### Prerequisites (Handled in Installation steps below)
 - Jest is installed
 - React Native Testing Library is installed
 
@@ -134,8 +134,14 @@ npx expo start
 cd CardKing
 npm install
 ```
-2. **Run Test Suites**
+2. **Confirm Installation (While cd into CardKing)**
+```bash
+npm list jest
+npm list @testing-library/react-native
+```
+
+3. **Run Test Suites**
 ```
 npm test
 ```
-> **Note:** 'npm test' will run all available test suites found in the __tests__ folder. To compile and run a specific suite, use the command 'npm test __tests__/{REPLACE WITH TEST FILE NAME}'.
+> **Note:** `npm test` will run all available test suites found in the __tests__ folder. To compile and run a specific suite, use the command `npm test __tests__/{REPLACE WITH TEST FILE NAME}`.
